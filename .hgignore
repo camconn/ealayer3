@@ -1,0 +1,8 @@
+syntax: regexp
+/build/
+/files$
+/logs$
+/testing$
+.*\.kdev4$
+.*\~$
+
