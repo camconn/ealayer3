@@ -1,8 +1,8 @@
 syntax: regexp
-/build/
-/files$
-/logs$
-/testing$
+build/
+files$
+logs$
+testing$
 .*\.kdev4$
 .*\~$
 

@@ -29,16 +29,16 @@ enum EOutputFormat
 struct SArguments
 {
     SArguments() :
-            ShowBanner(true),
-            ShowUsage(false),
-            ShowInfo(false),
-            ForceParser5(false),
-            InputFilename(""),
-            OutputFilename(""),
-            StreamIndex(0),
-            AllStreams(false),
-            Offset(0),
-            OutputFormat(EOF_AUTO)
+        ShowBanner(true),
+        ShowUsage(false),
+        ShowInfo(false),
+        ForceParser5(false),
+        InputFilename(""),
+        OutputFilename(""),
+        StreamIndex(0),
+        AllStreams(false),
+        Offset(0),
+        OutputFormat(EOF_AUTO)
     {
     };
 
