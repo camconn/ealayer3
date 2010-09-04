@@ -87,6 +87,13 @@ unsigned int elPcmOutputStream::Read(short int* Buffer, unsigned int BufferSampl
         m_Eos = true;
         return 0;
     }
+    else if (Result == MPG123_OK)
+    {
+    }
+    else
+    {
+        throw (elMpg123Exception(Result));
+    }
 
     // Now that we have the buffer
     unsigned long Samples = Done / sizeof(short);
@@ -198,6 +205,23 @@ unsigned int elPcmOutputStream::FixupOutFrame(short* Buffer, unsigned int Buffer
     VERBOSE("Skipping " << (GrA.Count + GrB.Count) << " uncompressed samples.");
     return BufferSamples;
 }
+
+elMpg123Exception::elMpg123Exception(int ErrorCode) throw():
+    m_ErrorCode(ErrorCode)
+{
+    return;
+}
+
+elMpg123Exception::~elMpg123Exception() throw()
+{
+    return;
+}
+
+const char* elMpg123Exception::what() const throw()
+{
+    return mpg123_plain_strerror(m_ErrorCode);
+}
+
 
 // Initialize the decoder
 struct elMpg123Initializer

@@ -1,5 +1,6 @@
 project (ealayer3)
 cmake_minimum_required (VERSION 2.8)
+enable_testing ()
 
 # Set our version number
 set (ealayer3_VERSION_MAJOR 0)
@@ -29,7 +30,7 @@ configure_file ("${PROJECT_SOURCE_DIR}/src/Version.h.in"
 include_directories("${PROJECT_BINARY_DIR}")
 
 # The list of source files
-set (SourceFiles
+set (SOURCE_FILES
     src/Main.cpp
     src/BlockLoader.cpp
     src/Parser.cpp
@@ -51,8 +52,20 @@ set (SourceFiles
     src/Parsers/ParserVersion6.cpp
     )
 
-add_executable (ealayer3 ${SourceFiles})
+add_executable (ealayer3 ${SOURCE_FILES})
 target_link_libraries (ealayer3 ${MPG123_LIBRARY})
+
+# Add support for tests
+file (GLOB FILES_TO_TEST files/*)
+set (TEST_SOURCE_FILES ${SOURCE_FILES} src/TestDriver.cpp)
+list (REMOVE_ITEM TEST_SOURCE_FILES src/Main.cpp)
+add_executable (ealayer3testdriver ${TEST_SOURCE_FILES})
+target_link_libraries (ealayer3testdriver ${MPG123_LIBRARY})
+
+foreach (TEST_FILE ${FILES_TO_TEST})
+    get_filename_component (TEST_NAME ${TEST_FILE} NAME)
+    add_test (${TEST_NAME} ealayer3testdriver ${TEST_FILE})
+endforeach (TEST_FILE)
 
 # Install targets
 if (WIN32)

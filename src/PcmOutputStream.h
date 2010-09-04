@@ -35,3 +35,14 @@ protected:
     mpg123_handle* m_Decoder;
     unsigned long m_SamplesLeft;
 };
+
+class elMpg123Exception : public std::exception
+{
+public:
+    elMpg123Exception(int ErrorCode) throw();
+    virtual ~elMpg123Exception() throw();
+    virtual const char* what() const throw();
+
+protected:
+    int m_ErrorCode;
+};
