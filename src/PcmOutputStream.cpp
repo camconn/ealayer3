@@ -222,7 +222,6 @@ const char* elMpg123Exception::what() const throw()
     return mpg123_plain_strerror(m_ErrorCode);
 }
 
-
 // Initialize the decoder
 struct elMpg123Initializer
 {

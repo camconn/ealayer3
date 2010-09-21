@@ -104,11 +104,13 @@ protected:
     void ConstructMpegFrame(const elFrame& Fr, bsBitstream& IS, elMpegFrame& Out);
     void ConstructMpegFrameV1(const elFrame& Fr, bsBitstream& IS, elMpegFrame& Out);
     void ConstructMpegFrameV2(const elFrame& Fr, bsBitstream& IS, elMpegFrame& Out);
+public:
     static unsigned int EstimateBitrateIndex(unsigned int FrameUsed, unsigned int SampleRate, unsigned int Version);
     static unsigned int CalculateFrameSize(unsigned int BitrateIndex, unsigned int SampleRate, unsigned int Version);
     static unsigned int CalculateSideInfoSize(unsigned int Channels, unsigned int Version);
     static unsigned int CalculatePrivateBits(unsigned int Channels, unsigned int Version);
     static unsigned int CalculateMainDataStartBits(unsigned int Version);
+protected:
     void WriteFields(elMpegFrame& Frame, unsigned int NewBitrateIndex, unsigned int NewUsedFromPrev) const;
 
     void Print(const elGranule& Gr, const std::string& Indent);

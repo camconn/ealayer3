@@ -15,6 +15,9 @@
 #include "MpegOutputStream.h"
 #include "PcmOutputStream.h"
 #include "WaveWriter.h"
+#include "Parsers/ParserVersion6.h"
+
+#include "MpegParser.h"
 
 int g_Verbose = 0;
 
@@ -23,7 +26,15 @@ enum EOutputFormat
     EOF_AUTO,
     EOF_MP3,
     EOF_WAVE,
-    EOF_MULTI_WAVE
+    EOF_MULTI_WAVE,
+    EOF_EALAYER3
+};
+
+enum EParser
+{
+    EP_AUTO,
+    EP_VERSION5,
+    EP_VERSION6
 };
 
 struct SArguments
@@ -32,7 +43,7 @@ struct SArguments
         ShowBanner(true),
         ShowUsage(false),
         ShowInfo(false),
-        ForceParser5(false),
+        Parser(EP_AUTO),
         InputFilename(""),
         OutputFilename(""),
         StreamIndex(0),
@@ -45,13 +56,15 @@ struct SArguments
     bool ShowBanner;
     bool ShowUsage;
     bool ShowInfo;
-    bool ForceParser5;
+    EParser Parser;
     std::string InputFilename;
     std::string OutputFilename;
     unsigned int StreamIndex;
     bool AllStreams;
     std::streamoff Offset;
     EOutputFormat OutputFormat;
+
+    std::vector<std::string> InputFilenameVector;
 };
 
 // Functions in this file
@@ -63,6 +76,7 @@ void CreateOutputFilename(SArguments& Args);
 bool OpenOutputFile(std::ofstream& Output, const std::string& Filename);
 void FinishParsingBlocks(elBlockLoader& Loader, elMpegGenerator& Gen);
 void OutputMultiChannel(std::ofstream& Output, elMpegGenerator& Gen, SArguments& Args);
+int Encode(SArguments& Args);
 
 
 void SeparateFilename(const std::string& Filename, std::string& PathAndName, std::string& Ext)
@@ -154,11 +168,20 @@ bool ParseArguments(SArguments& Args, unsigned long Argc, char* Argv[])
         }
         else if (Arg == "--parser5")
         {
-            Args.ForceParser5 = true;
+            Args.Parser = EP_VERSION5;
+        }
+        else if (Arg == "--parser6")
+        {
+            Args.Parser = EP_VERSION6;
+        }
+        else if (Arg == "-E")
+        {
+            Args.OutputFormat = EOF_EALAYER3;
         }
         else
         {
             Args.InputFilename = Arg;
+            Args.InputFilenameVector.push_back(Arg);
         }
     }
 
@@ -253,6 +276,11 @@ int main(int Argc, char **Argv)
         SetOutputFormat(Args);
     }
 
+    if (Args.OutputFormat == EOF_EALAYER3)
+    {
+        return Encode(Args);
+    }
+
     // Create an output filename if there isn't already one
     bool ShowOutputFile = false;
 
@@ -295,7 +323,25 @@ int main(int Argc, char **Argv)
         return 1;
     }
 
-    if (!Gen.Initialize(FirstBlock, Args.ForceParser5 ? make_shared<elParser>() : Loader.CreateParser()))
+    // Create the parser.
+    shared_ptr<elParser> Parser;
+    switch (Args.Parser)
+    {
+    case EP_VERSION5:
+        Parser = make_shared<elParser>();
+        break;
+
+    case EP_VERSION6:
+        Parser = make_shared<elParserVersion6>();
+        break;
+        
+    case EP_AUTO:
+    default:
+        Parser = Loader.CreateParser();
+        break;
+    }
+
+    if (!Gen.Initialize(FirstBlock, Parser))
     {
         std::cerr << "The EALayer3 parser could not be initialized (the bitstream format is not readable)." << std::endl;
         return 1;
@@ -508,7 +554,7 @@ void CreateOutputFilename(SArguments& Args)
     std::string PathAndName;
     std::string Ext;
 
-    SeparateFilename(Args.InputFilename, PathAndName, Ext);
+    SeparateFilename(Args.InputFilenameVector[0], PathAndName, Ext);
     Args.OutputFilename = PathAndName;
 
     switch (Args.OutputFormat)
@@ -524,6 +570,10 @@ void CreateOutputFilename(SArguments& Args)
 
     case EOF_MULTI_WAVE:
         Args.OutputFilename.append(".wav");
+        break;
+
+    case EOF_EALAYER3:
+        Args.OutputFilename.append(".ealayer3");
         break;
     }
 
@@ -582,9 +632,7 @@ void OutputMultiChannel(std::ofstream& Output, elMpegGenerator& Gen, SArguments&
     // Allocate a buffer
     shared_array<short> ReadBuffer(new short[ChannelCount *
                                    elPcmOutputStream::RecommendBufferSize()]);
-
     const unsigned int PcmBufferSamples = elPcmOutputStream::RecommendBufferSize();
-
     shared_array<short> PcmBuffer(new short[PcmBufferSamples]);
 
     // Prepare the wave
@@ -620,11 +668,64 @@ void OutputMultiChannel(std::ofstream& Output, elMpegGenerator& Gen, SArguments&
     }
 
     const unsigned int SampleCount = ((unsigned int) Output.tellp() - 44) / 2;
-
     Output.seekp(0);
-
     WriteWaveHeader(Output, Gen.GetSampleRate(0), 16,
                     ChannelCount, SampleCount);
 
     return;
+}
+
+struct elEncodeInput
+{
+    elEncodeInput(const std::string& MpegFile, const std::string& WaveFile) :
+        MpegFile(MpegFile), WaveFile(WaveFile) {}
+        
+    std::string MpegFile;
+    std::string WaveFile;
+
+    shared_ptr<std::ifstream> MpegInput;
+    shared_ptr<std::ifstream> WaveInput;
+
+    shared_ptr<elMpegParser> MpegParser;
+
+    // MpegParser? WaveParser?
+};
+
+int Encode(SArguments& Args)
+{
+    // Create an output filename if there isn't already one
+    bool ShowOutputFile = false;
+
+    if (Args.OutputFilename.empty() && !Args.ShowInfo)
+    {
+        CreateOutputFilename(Args);
+        ShowOutputFile = true;
+    }
+
+    // TODO: Parse the input parameters
+    std::vector<elEncodeInput> InputFiles;
+    InputFiles.push_back(elEncodeInput(Args.InputFilenameVector[0], ""));
+
+    // Create an MpegParser and perhaps a WaveParser for each of the inputs
+    shared_ptr<std::ifstream> Input = make_shared<std::ifstream>();
+    Input->open(InputFiles.back().MpegFile.c_str());
+    if (!Input->is_open())
+    {
+        std::cerr << "Could not open input file '" << InputFiles.back().MpegFile.c_str() << "'." << std::endl;
+        return 1;
+    }
+    InputFiles.back().MpegInput = Input;
+
+    // Create the parser
+    shared_ptr<elMpegParser> Parser = make_shared<elMpegParser>();
+    InputFiles.back().MpegParser = Parser;
+    Parser->Initialize(Input.get());
+
+    elFrame Frame;
+    Parser->ReadFrame(Frame);
+    Parser->ReadFrame(Frame);
+    Parser->ReadFrame(Frame);
+    Parser->ReadFrame(Frame);
+    Parser->ReadFrame(Frame);
+    return 0;
 }

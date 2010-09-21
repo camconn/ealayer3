@@ -40,6 +40,8 @@ set (SOURCE_FILES
     src/PcmOutputStream.cpp
     src/WaveWriter.cpp
     src/AllFormats.cpp
+    src/MpegParser.cpp
+    src/Generator.cpp
 
     src/Loaders/HeaderlessLoader.cpp
     src/Loaders/SingleBlockLoader.cpp
