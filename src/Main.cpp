@@ -722,10 +722,9 @@ int Encode(SArguments& Args)
     Parser->Initialize(Input.get());
 
     elFrame Frame;
-    Parser->ReadFrame(Frame);
-    Parser->ReadFrame(Frame);
-    Parser->ReadFrame(Frame);
-    Parser->ReadFrame(Frame);
-    Parser->ReadFrame(Frame);
+    for (unsigned int i = 0; i < 10; i++)
+    {
+        Parser->ReadFrame(Frame);
+    }
     return 0;
 }

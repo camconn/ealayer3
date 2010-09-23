@@ -9,6 +9,7 @@
 #include "Internal.h"
 
 struct elFrame;
+struct elChannelInfo;
 
 class elMpegParser
 {
@@ -27,16 +28,36 @@ public:
 
     
 protected:
+    /// A raw MPEG frame
+    struct elRawFrameHeader
+    {
+        unsigned int Version;
+        bool Crc;
+        unsigned int BitrateIndex;
+        unsigned int SampleRateIndex;
+        bool Padding;
+        unsigned int ChannelMode;
+        unsigned int ModeExtension;
+
+        unsigned int HeaderSize;
+        unsigned int SampleRate;
+        unsigned int FrameSize;
+        unsigned int Channels;
+    };
+    
     /// Skip over a ID3 tag.
     void SkipID3Tag(uint8_t FrameHeader[10]);
 
     /// Process the MPEG frame header.
-    bool ProcessFrameHeader(elFrame& Frame, uint8_t FrameHeader[10]);
+    bool ProcessFrameHeader(elRawFrameHeader& Frame, uint8_t FrameHeader[10]);
 
     /// Process an actual frame.
-    // TODO: me
+    bool ProcessMpegFrame(elFrame& Fr, elRawFrameHeader& Hdr);
     
     std::istream* m_Input;
+
+    uint8_t m_Reservoir[2880];
+    unsigned int m_ReservoirUsed;
 };
 
 class elMpegParserException : public std::exception

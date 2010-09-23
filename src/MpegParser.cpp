@@ -17,7 +17,8 @@ static const unsigned int MpegSampleRateTable[4][4] = {
     {44100, 48000, 32000, 0}
 };
 
-elMpegParser::elMpegParser()
+elMpegParser::elMpegParser() :
+    m_ReservoirUsed(0)
 {
     return;
 }
@@ -31,6 +32,7 @@ void elMpegParser::Initialize(std::istream* Input)
 {
     assert(Input);
     m_Input = Input;
+    m_ReservoirUsed = 0;
 
     // TODO: Make sure this really is an MP3 file
     return;
@@ -61,7 +63,15 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
     else if (FrameHeader[0] == 0xFF)
     {
         //m_Input->seekg(StartOffset + 4);
-        ProcessFrameHeader(Frame, FrameHeader);
+        elRawFrameHeader RawFrameHeader;
+        if (!ProcessFrameHeader(RawFrameHeader, FrameHeader))
+        {
+            return false;
+        }
+        if (!ProcessMpegFrame(Frame, RawFrameHeader))
+        {
+            return false;
+        }
         // TODO: Check if this is really a frame or just VBR info
     }
     return false;
@@ -101,69 +111,208 @@ void elMpegParser::SkipID3Tag(uint8_t FrameHeader[10])
     return;
 }
 
-bool elMpegParser::ProcessFrameHeader(elFrame& Frame, uint8_t FrameHeader[10])
+bool elMpegParser::ProcessFrameHeader(elRawFrameHeader& Fr, uint8_t FrameHeader[10])
 {
     bsBitstream IS(FrameHeader, 10);
     
-    // Read the fields
+    // Read the fields.
     if (IS.ReadBits(11) != 0x7FF)
     {
         throw (elMpegParserException("MPEG sync bits don't match. Keep in mind that for this program to work the MP3 must be well-formed."));
     }
     
-    Frame.Gr[0].Version = Frame.Gr[1].Version = IS.ReadBits(2);
+    Fr.Version = IS.ReadBits(2);
     
     if (IS.ReadBits(2) != 0x1)
     {
         throw (elMpegParserException("File not supported; only MPEG layer 3 is supported."));
     }
     
-    bool Crc = IS.ReadBit() == 1 ? false : true;
-    
-    unsigned int BitrateIndex = IS.ReadBits(4);
-    
-    Frame.Gr[0].SampleRateIndex = Frame.Gr[1].SampleRateIndex = IS.ReadBits(2);
-    
-    bool Padding = IS.ReadBit() == 0 ? false : true;
+    Fr.Crc = (IS.ReadBit() == 0) ? true : false;
+    Fr.BitrateIndex = IS.ReadBits(4);
+    Fr.SampleRateIndex = IS.ReadBits(2);
+    Fr.Padding = (IS.ReadBit() == 1) ? true : false;
     
     IS.ReadBit();
     
-    Frame.Gr[0].ChannelMode = Frame.Gr[1].ChannelMode = IS.ReadBits(2);
-    
-    Frame.Gr[0].ModeExtension = Frame.Gr[1].ModeExtension = IS.ReadBits(2);
+    Fr.ChannelMode = IS.ReadBits(2);
+    Fr.ModeExtension = IS.ReadBits(2);
     
     IS.ReadBits(4);
 
-    // Sample rate
-    Frame.Gr[0].SampleRate = Frame.Gr[1].SampleRate =
-        MpegSampleRateTable[Frame.Gr[0].Version][Frame.Gr[0].SampleRateIndex];
+    // Calculate the header size.
+    Fr.HeaderSize = 4 + (Fr.Crc ? 2 : 0);
 
-    // Calculate the total size
-    unsigned int FrameSize;
-    FrameSize = elMpegGenerator::CalculateFrameSize(BitrateIndex, Frame.Gr[0].SampleRate,
-                                                    Frame.Gr[0].Version);
+    // Calculate the sample rate.
+    Fr.SampleRate = MpegSampleRateTable[Fr.Version][Fr.SampleRateIndex];
 
-    if (Padding)
+    // Calculate the total size.
+    Fr.FrameSize = elMpegGenerator::CalculateFrameSize(Fr.BitrateIndex, Fr.SampleRate, Fr.Version);
+    if (Fr.Padding)
     {
-        FrameSize++;
+        Fr.FrameSize++;
     }
 
-    // Check to see if this is a VBR frame
+    // Calculate the number of channels;
+    Fr.Channels = (Fr.ChannelMode == CM_MONO) ? 1 : 2;
 
-    // Read the side info
+    // Seek past the header and the CRC.
+    m_Input->seekg(Fr.HeaderSize, std::ios_base::cur);
 
-    // Get the bits from the reservoir
-
-    // Get the main data
-
-    // Put the bits on the end into the reservoir
-
-    m_Input->seekg(FrameSize, std::ios_base::cur);
+    VERBOSE("Frame size: " << Fr.FrameSize);
     
-    VERBOSE("Frame size: " << FrameSize);
     return true;
 }
 
+bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader& Hdr)
+{
+    // Construct our Fr.
+    Fr.Gr[0].Version = Fr.Gr[1].Version = Hdr.Version;
+    Fr.Gr[0].SampleRateIndex = Fr.Gr[1].SampleRateIndex = Hdr.SampleRateIndex;
+    Fr.Gr[0].SampleRate = Fr.Gr[1].SampleRate = Hdr.SampleRate;
+    Fr.Gr[0].ChannelMode = Fr.Gr[1].ChannelMode = Hdr.ChannelMode;
+    Fr.Gr[0].Channels = Fr.Gr[1].Channels = Hdr.Channels;
+    Fr.Gr[0].ModeExtension = Fr.Gr[1].ModeExtension = Hdr.ModeExtension;
+    Fr.Gr[0].Index = 0;
+    Fr.Gr[1].Index = 1;
+
+    for (unsigned int i = 0; i < 2; i++)
+    {
+        for (unsigned int j = 0; j < Hdr.Channels; j++)
+        {
+            Fr.Gr[i].ChannelInfo.push_back(elChannelInfo());
+            Fr.Gr[i].ChannelInfo.back().Scfsi = 0;
+        }
+    }
+    
+    // Read the side info.
+    uint8_t FrameData[2880];
+    bool UsefullFrame = false;
+    const unsigned int SideInfoSize = elMpegGenerator::CalculateSideInfoSize(Hdr.Channels, Hdr.Version);
+    m_Input->read((char*)FrameData, Hdr.FrameSize - Hdr.HeaderSize);
+    
+    bsBitstream IS(FrameData, Hdr.FrameSize - Hdr.HeaderSize);
+
+    // Parse the side info.
+    unsigned int MainDataStart;
+    
+    MainDataStart = IS.ReadBits(elMpegGenerator::CalculateMainDataStartBits(Hdr.Version));
+    IS.ReadBits(elMpegGenerator::CalculatePrivateBits(Hdr.Channels, Hdr.Version));
+
+    if (Hdr.Version == MV_1)
+    {
+        for (unsigned int i = 0; i < Hdr.Channels; i++)
+        {
+            Fr.Gr[1].ChannelInfo[i].Scfsi = IS.ReadBits(4);
+        }
+    }
+
+    unsigned int DataSize = 0;
+    for (unsigned int i = 0; i < 2; i++)
+    {
+        for (unsigned int j = 0; j < Fr.Gr[i].Channels; j++)
+        {
+            Fr.Gr[i].ChannelInfo[j].Size = IS.ReadBits(12);
+            VERBOSE("Size: " << Fr.Gr[i].ChannelInfo[j].Size);
+            Fr.Gr[i].ChannelInfo[j].SideInfo[0] = IS.ReadBits(32);
+            if (Fr.Gr[i].Version == MV_1)
+            {
+                Fr.Gr[i].ChannelInfo[j].SideInfo[1] = IS.ReadBits(47 - 32);
+            }
+            else
+            {
+                Fr.Gr[i].ChannelInfo[j].SideInfo[1] = IS.ReadBits(51 - 32);
+            }
+
+            if (Fr.Gr[i].ChannelInfo[j].Size)
+            {
+                UsefullFrame = true;
+                DataSize += Fr.Gr[i].ChannelInfo[j].Size;
+            }
+        }
+    }
+
+    if (DataSize % 8)
+    {
+        DataSize += 8 - (DataSize % 8);
+    }
+    DataSize /= 8;
+
+    // The reservoir
+    bsBitstream Res;
+    unsigned int ResBitsLeft = MainDataStart * 8;
+
+    if (m_ReservoirUsed && MainDataStart)
+    {
+        //VERBOSE(int(m_ReservoirUsed - MainDataStart));
+        Res.SetData(m_Reservoir + (m_ReservoirUsed - MainDataStart), m_ReservoirUsed);
+    }
+
+    // Create the data.
+    for (unsigned int i = 0; i < 2; i++)
+    {
+        // How many bits are in this channel's data
+        unsigned int GrDataSize = 0;
+        for (unsigned int j = 0; j < Fr.Gr[i].Channels; j++)
+        {
+            GrDataSize += Fr.Gr[i].ChannelInfo[j].Size;
+        }
+
+        // Round to the nearest byte
+        Fr.Gr[i].DataSize = GrDataSize;
+        if (GrDataSize % 8)
+        {
+            Fr.Gr[i].DataSize += 8 - (GrDataSize % 8);
+        }
+        Fr.Gr[i].DataSize /= 8;
+
+        // Read it in if there is anything
+        if (GrDataSize)
+        {
+            Fr.Gr[i].Data = shared_array<uint8_t>(new uint8_t[Fr.Gr[i].DataSize]);
+
+            bsBitstream OS(Fr.Gr[i].Data.get(), Fr.Gr[i].DataSize);
+            while (GrDataSize)
+            {
+                if (ResBitsLeft > 0)
+                {
+                    unsigned int BitsToRead = min(min(32, ResBitsLeft), GrDataSize);
+                    uint32_t Bits = Res.ReadBits(BitsToRead);
+                    OS.WriteBits(Bits, BitsToRead);
+                    ResBitsLeft -= BitsToRead;
+                    GrDataSize -= BitsToRead;
+                }
+                else
+                {
+                    unsigned int BitsToRead = min(32, GrDataSize);
+                    uint32_t Bits = IS.ReadBits(BitsToRead);
+                    OS.WriteBits(Bits, BitsToRead);
+                    GrDataSize -= BitsToRead;
+                }
+            }
+            OS.WriteToNextByte();
+        }
+        else
+        {
+            Fr.Gr[i].Data.reset();
+        }
+    }
+
+    // Put the bits on the end into the reservoir.
+    m_ReservoirUsed = (Hdr.FrameSize - Hdr.HeaderSize - SideInfoSize) - (DataSize - MainDataStart);
+    VERBOSE("m_ReservoirUsed = " << m_ReservoirUsed);
+    if (m_ReservoirUsed < sizeof(m_Reservoir))
+    {
+        IS.SeekToNextByte();
+        memcpy(m_Reservoir, IS.GetData() + IS.Tell() / 8, m_ReservoirUsed);
+        VERBOSE("IS.GetCountBitsLeft() / 8 = " << m_ReservoirUsed);
+    }
+    //m_Input->read((char*)m_Reservoir, m_ReservoirUsed);
+
+    // Set used.
+    Fr.Gr[0].Used = Fr.Gr[1].Used = true;
+    return true;
+}
 
 elMpegParserException::elMpegParserException(const std::string& What) throw() :
     m_What(What)
