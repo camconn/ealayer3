@@ -166,7 +166,7 @@ bool elMpegParser::ProcessFrameHeader(elRawFrameHeader& Fr, uint8_t FrameHeader[
 
 bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader& Hdr)
 {
-    // Construct our Fr.
+    // Construct our frame.
     Fr.Gr[0].Version = Fr.Gr[1].Version = Hdr.Version;
     Fr.Gr[0].SampleRateIndex = Fr.Gr[1].SampleRateIndex = Hdr.SampleRateIndex;
     Fr.Gr[0].SampleRate = Fr.Gr[1].SampleRate = Hdr.SampleRate;
@@ -185,12 +185,12 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
         }
     }
     
-    // Read the side info.
+    // Read the frame into memory, without the 4 byte header.
     uint8_t FrameData[2880];
-    bool UsefullFrame = false;
     const unsigned int SideInfoSize = elMpegGenerator::CalculateSideInfoSize(Hdr.Channels, Hdr.Version);
     m_Input->read((char*)FrameData, Hdr.FrameSize - Hdr.HeaderSize);
-    
+
+    // A bitstream for parsing the frame in memory.
     bsBitstream IS(FrameData, Hdr.FrameSize - Hdr.HeaderSize);
 
     // Parse the side info.
@@ -213,7 +213,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
         for (unsigned int j = 0; j < Fr.Gr[i].Channels; j++)
         {
             Fr.Gr[i].ChannelInfo[j].Size = IS.ReadBits(12);
-            VERBOSE("Size: " << Fr.Gr[i].ChannelInfo[j].Size);
+            VERBOSE("        Size: " << Fr.Gr[i].ChannelInfo[j].Size);
             Fr.Gr[i].ChannelInfo[j].SideInfo[0] = IS.ReadBits(32);
             if (Fr.Gr[i].Version == MV_1)
             {
@@ -224,23 +224,27 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
                 Fr.Gr[i].ChannelInfo[j].SideInfo[1] = IS.ReadBits(51 - 32);
             }
 
-            if (Fr.Gr[i].ChannelInfo[j].Size)
-            {
-                UsefullFrame = true;
-                DataSize += Fr.Gr[i].ChannelInfo[j].Size;
-            }
+            DataSize += Fr.Gr[i].ChannelInfo[j].Size;
         }
     }
 
+    // Convert DataSize to bytes.
     if (DataSize % 8)
     {
         DataSize += 8 - (DataSize % 8);
     }
     DataSize /= 8;
 
-    // The reservoir
+    VERBOSE("    MainDataStart = " << MainDataStart);
+
+    // The reservoir.
     bsBitstream Res;
     unsigned int ResBitsLeft = MainDataStart * 8;
+
+    if (DataSize && MainDataStart > m_ReservoirUsed)
+    {
+        throw (elMpegParserException("Bit reservoir underflow. Invalid MP3 file."));
+    }
 
     if (m_ReservoirUsed && MainDataStart)
     {
@@ -248,7 +252,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
         Res.SetData(m_Reservoir + (m_ReservoirUsed - MainDataStart), m_ReservoirUsed);
     }
 
-    // Create the data.
+    // Read in the data.
     for (unsigned int i = 0; i < 2; i++)
     {
         // How many bits are in this channel's data
@@ -300,14 +304,19 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
 
     // Put the bits on the end into the reservoir.
     m_ReservoirUsed = (Hdr.FrameSize - Hdr.HeaderSize - SideInfoSize) - (DataSize - MainDataStart);
-    VERBOSE("m_ReservoirUsed = " << m_ReservoirUsed);
+    VERBOSE("    ReservoirUsed = " << m_ReservoirUsed);
     if (m_ReservoirUsed < sizeof(m_Reservoir))
     {
         IS.SeekToNextByte();
         memcpy(m_Reservoir, IS.GetData() + IS.Tell() / 8, m_ReservoirUsed);
-        VERBOSE("IS.GetCountBitsLeft() / 8 = " << m_ReservoirUsed);
     }
-    //m_Input->read((char*)m_Reservoir, m_ReservoirUsed);
+
+    // Make sure this frame actually has data
+    if (DataSize < 1)
+    {
+        VERBOSE("Skipped empty frame");
+        return true;
+    }
 
     // Set used.
     Fr.Gr[0].Used = Fr.Gr[1].Used = true;
