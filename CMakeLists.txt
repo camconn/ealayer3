@@ -4,7 +4,7 @@ enable_testing ()
 
 # Set our version number
 set (ealayer3_VERSION_MAJOR 0)
-set (ealayer3_VERSION_MINOR 5)
+set (ealayer3_VERSION_MINOR 6)
 set (ealayer3_VERSION_PATCH 0)
 
 # Find boost and include it
@@ -42,6 +42,7 @@ set (SOURCE_FILES
     src/AllFormats.cpp
     src/MpegParser.cpp
     src/Generator.cpp
+    src/BlockWriter.cpp
 
     src/Loaders/HeaderlessLoader.cpp
     src/Loaders/SingleBlockLoader.cpp

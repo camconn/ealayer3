@@ -18,6 +18,8 @@
 #include "Parsers/ParserVersion6.h"
 
 #include "MpegParser.h"
+#include "Generator.h"
+#include "BlockWriter.h"
 
 int g_Verbose = 0;
 
@@ -587,7 +589,7 @@ bool OpenOutputFile(std::ofstream& Output, const std::string& Filename)
     if (!Output.is_open())
     {
         std::cerr << "Could not open output file '" << Filename << "'." << std::endl;
-        return 1;
+        return false;
     }
 
     return true;
@@ -720,6 +722,15 @@ int Encode(SArguments& Args)
     shared_ptr<elMpegParser> Parser = make_shared<elMpegParser>();
     InputFiles.back().MpegParser = Parser;
     Parser->Initialize(Input.get());
+
+    // Open output file
+    std::ofstream Output;
+    if (!OpenOutputFile(Output, Args.OutputFilename))
+    {
+        return 1;
+    }
+
+    elGenerator Gen;
 
     elFrame Frame;
     for (unsigned int i = 0; i < 10; i++)

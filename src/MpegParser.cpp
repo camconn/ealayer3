@@ -212,19 +212,22 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     {
         for (unsigned int j = 0; j < Fr.Gr[i].Channels; j++)
         {
-            Fr.Gr[i].ChannelInfo[j].Size = IS.ReadBits(12);
-            VERBOSE("        Size: " << Fr.Gr[i].ChannelInfo[j].Size);
-            Fr.Gr[i].ChannelInfo[j].SideInfo[0] = IS.ReadBits(32);
-            if (Fr.Gr[i].Version == MV_1)
+            elGranule& Gr = Fr.Gr[i];
+            elChannelInfo& Ci = Gr.ChannelInfo[j];
+            
+            Ci.Size = IS.ReadBits(12);
+            VERBOSE("        Size: " << Ci.Size);
+            Ci.SideInfo[0] = IS.ReadBits(32);
+            if (Gr.Version == MV_1)
             {
-                Fr.Gr[i].ChannelInfo[j].SideInfo[1] = IS.ReadBits(47 - 32);
+                Ci.SideInfo[1] = IS.ReadBits(47 - 32);
             }
             else
             {
-                Fr.Gr[i].ChannelInfo[j].SideInfo[1] = IS.ReadBits(51 - 32);
+                Ci.SideInfo[1] = IS.ReadBits(51 - 32);
             }
 
-            DataSize += Fr.Gr[i].ChannelInfo[j].Size;
+            DataSize += Ci.Size;
         }
     }
 
@@ -255,27 +258,29 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     // Read in the data.
     for (unsigned int i = 0; i < 2; i++)
     {
+        elGranule& Gr = Fr.Gr[i];
+        
         // How many bits are in this channel's data
         unsigned int GrDataSize = 0;
-        for (unsigned int j = 0; j < Fr.Gr[i].Channels; j++)
+        for (unsigned int j = 0; j < Gr.Channels; j++)
         {
-            GrDataSize += Fr.Gr[i].ChannelInfo[j].Size;
+            GrDataSize += Gr.ChannelInfo[j].Size;
         }
 
         // Round to the nearest byte
-        Fr.Gr[i].DataSize = GrDataSize;
+        Gr.DataSize = GrDataSize;
         if (GrDataSize % 8)
         {
-            Fr.Gr[i].DataSize += 8 - (GrDataSize % 8);
+            Gr.DataSize += 8 - (GrDataSize % 8);
         }
-        Fr.Gr[i].DataSize /= 8;
+        Gr.DataSize /= 8;
 
         // Read it in if there is anything
         if (GrDataSize)
         {
-            Fr.Gr[i].Data = shared_array<uint8_t>(new uint8_t[Fr.Gr[i].DataSize]);
+            Gr.Data = shared_array<uint8_t>(new uint8_t[Gr.DataSize]);
 
-            bsBitstream OS(Fr.Gr[i].Data.get(), Fr.Gr[i].DataSize);
+            bsBitstream OS(Gr.Data.get(), Gr.DataSize);
             while (GrDataSize)
             {
                 if (ResBitsLeft > 0)
@@ -298,7 +303,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
         }
         else
         {
-            Fr.Gr[i].Data.reset();
+            Gr.Data.reset();
         }
     }
 
@@ -315,11 +320,13 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     if (DataSize < 1)
     {
         VERBOSE("Skipped empty frame");
+        VERBOSE("");
         return true;
     }
 
     // Set used.
     Fr.Gr[0].Used = Fr.Gr[1].Used = true;
+    VERBOSE("");
     return true;
 }
 
