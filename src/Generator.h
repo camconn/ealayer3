@@ -35,11 +35,17 @@ public:
     virtual void AddFrameFromStream(const elFrame& Fr);
 
     /**
+     * Clear the frame queue.
+     */
+    virtual void Clear();
+
+    /**
      * Generate the resulting block. Takes all of the frames pushed so far, and
      * then clears the queue.
      * @param Keep If non-zero then Generate will not discard the existing contents
      *             of the frame, but rather it respects the data that is already
      *             there, starting Keep bytes into the data.
+     * @returns    Will return true if data was written to the block, false otherwise.
      */
     virtual bool Generate(elBlock& Block, unsigned int Keep = 0);
 

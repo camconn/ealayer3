@@ -208,6 +208,8 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
 
     for (unsigned int i = 0; i < 2; i++)
     {
+        Fr.Gr[i].ChannelInfo.clear();
+        
         for (unsigned int j = 0; j < Hdr.Channels; j++)
         {
             Fr.Gr[i].ChannelInfo.push_back(elChannelInfo());

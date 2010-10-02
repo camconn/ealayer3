@@ -683,6 +683,13 @@ struct elEncodeInput
 {
     elEncodeInput(const std::string& MpegFile, const std::string& WaveFile) :
         MpegFile(MpegFile), WaveFile(WaveFile) {}
+
+    inline void SetupFrames()
+    {
+        CurrentFrame = &Frame1;
+        LastFrame = &Frame2;
+        LastFrame->Gr[0].Used = false;
+    }
         
     std::string MpegFile;
     std::string WaveFile;
@@ -693,7 +700,14 @@ struct elEncodeInput
     shared_ptr<elMpegParser> MpegParser;
 
     // MpegParser? WaveParser?
+
+    elFrame Frame1;
+    elFrame Frame2;
+    elFrame* CurrentFrame;
+    elFrame* LastFrame;
 };
+
+typedef std::vector<elEncodeInput> elEncodeInputVector;
 
 int Encode(SArguments& Args)
 {
@@ -706,24 +720,39 @@ int Encode(SArguments& Args)
         ShowOutputFile = true;
     }
 
-    // TODO: Parse the input parameters
-    std::vector<elEncodeInput> InputFiles;
-    InputFiles.push_back(elEncodeInput(Args.InputFilenameVector[0], ""));
+    // The container for the inputs for each stream
+    elEncodeInputVector InputFiles;
 
-    // Create an MpegParser and perhaps a WaveParser for each of the inputs
-    shared_ptr<std::ifstream> Input = make_shared<std::ifstream>();
-    Input->open(InputFiles.back().MpegFile.c_str());
-    if (!Input->is_open())
+    // Parse the input parameters
+    for (std::vector<std::string>::const_iterator Iter = Args.InputFilenameVector.begin();
+        Iter != Args.InputFilenameVector.end(); ++Iter)
     {
-        std::cerr << "Could not open input file '" << InputFiles.back().MpegFile.c_str() << "'." << std::endl;
-        return 1;
-    }
-    InputFiles.back().MpegInput = Input;
+        // Add this to the inputs
+        InputFiles.push_back(elEncodeInput(*Iter, ""));
 
-    // Create the parser
-    shared_ptr<elMpegParser> Parser = make_shared<elMpegParser>();
-    InputFiles.back().MpegParser = Parser;
-    Parser->Initialize(Input.get());
+        // Create an MpegParser and perhaps a WaveParser for each of the inputs
+        shared_ptr<std::ifstream> Input = make_shared<std::ifstream>();
+        Input->open(InputFiles.back().MpegFile.c_str());
+        if (!Input->is_open())
+        {
+            std::cerr << "Could not open input file '" << InputFiles.back().MpegFile.c_str() << "'." << std::endl;
+            return 1;
+        }
+        InputFiles.back().MpegInput = Input;
+
+        // Create the parser
+        shared_ptr<elMpegParser> Parser = make_shared<elMpegParser>();
+        Parser->Initialize(Input.get());
+        InputFiles.back().MpegParser = Parser;
+    }
+
+    // This is needed because otherwise the pointers to frames will be invalidated
+    // when a new item is added to the vector.
+    for (elEncodeInputVector::iterator Iter = InputFiles.begin();
+        Iter != InputFiles.end(); ++Iter)
+    {
+        Iter->SetupFrames();
+    }
 
     // Open output file
     std::ofstream Output;
@@ -732,45 +761,58 @@ int Encode(SArguments& Args)
         return 1;
     }
 
+    // The generator and writer
     elGenerator Gen;
-    elHeaderlessWriter Writer;
-    Writer.Initialize(&Output);
+    shared_ptr<elBlockWriter> Writer = make_shared<elHeaderlessWriter>();
+    Writer->Initialize(&Output);
 
-    elFrame Frame1;
-    elFrame Frame2;
-    elFrame* CurrentFrame = &Frame1;
-    elFrame* LastFrame = &Frame2;
-
-    LastFrame->Gr[0].Used = false;
-    
+    // Some variables
     elBlock Block;
     bool NoMoreFrames = false;
-    bool LastWrite = false;
-    
-    while (!LastWrite)
+
+    // The loop that parses all the MPEG frames and generates EALayer3 blocks
+    while (!NoMoreFrames)
     {
-        // Read the next frame in if we're not done
-        if (NoMoreFrames)
+        // Read the next frames in if we're not done
+        for (elEncodeInputVector::iterator Iter = InputFiles.begin();
+            Iter != InputFiles.end(); ++Iter)
         {
-            LastWrite = true;
-        }
-        else
-        {
-            NoMoreFrames = !Parser->ReadFrame(*CurrentFrame);
+            elMpegParser& Parser = *Iter->MpegParser;
+            elFrame& CurrentFrame = *Iter->CurrentFrame;
+
+            do
+            {
+                if (!Parser.ReadFrame(CurrentFrame))
+                {
+                    NoMoreFrames = true;
+                    break;
+                }
+            } while (!CurrentFrame.Gr[0].Used);
         }
 
-        // Write the last frame if it was used
-        if (LastFrame->Gr[0].Used)
+        // Add the last frame if it was used for each of the streams
+        for (elEncodeInputVector::iterator Iter = InputFiles.begin();
+            Iter != InputFiles.end(); ++Iter)
         {
-            Gen.AddFrameFromStream(*LastFrame);
-            Gen.Generate(Block);
-            Writer.WriteNextBlock(Block, LastWrite);
+            elFrame*& LastFrame = Iter->LastFrame;
+            elFrame*& CurrentFrame = Iter->CurrentFrame;
+            
+            if (LastFrame->Gr[0].Used)
+            {
+                Gen.AddFrameFromStream(*LastFrame);
+            }
+
+            // Now the current and last frames are swapped
+            elFrame* Temp = LastFrame;
+            LastFrame = CurrentFrame;
+            CurrentFrame = Temp;
         }
 
-        // Now the current and last frames are swapped
-        elFrame* Temp = LastFrame;
-        LastFrame = CurrentFrame;
-        CurrentFrame = Temp;
+        // Write the block
+        if (Gen.Generate(Block))
+        {
+            Writer->WriteNextBlock(Block, NoMoreFrames);
+        }
     }
     return 0;
 }

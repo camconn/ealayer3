@@ -33,8 +33,21 @@ void elGenerator::AddFrameFromStream(const elFrame& Fr)
     return;
 }
 
+void elGenerator::Clear()
+{
+    m_Streams.clear();
+    return;
+}
+
+
 bool elGenerator::Generate(elBlock& Block, unsigned int Keep)
 {
+    // If we don't have any streams return false
+    if (m_Streams.size() < 1)
+    {
+        return false;
+    }
+    
     // This is probably a bad assumption, but assume that there is enough
     // space for our block if the block is allocated at all.
     if (!Block.Data)
@@ -57,7 +70,6 @@ bool elGenerator::Generate(elBlock& Block, unsigned int Keep)
             FrIter != m_Streams.end(); ++FrIter)
         {
             const elGranule& Gr = FrIter->Gr[i];
-
             WriteGranuleWithUncSamples(OS, Gr);
         }
     }

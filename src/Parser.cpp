@@ -67,7 +67,7 @@ inline void PutStreamOnBack(elStreamVector& Streams, unsigned int CurrentStream)
     }
     else if (CurrentStream > Streams.size())
     {
-        throw (elParserException("Bug in this program! Take it back to the store and try to get a refund."));
+        throw (elParserException("Bug in this program! (PutStreamOnBack)"));
     }
     return;
 }
@@ -80,7 +80,7 @@ inline void PutFrameOnBack(elStream& Frames, unsigned int CurrentFrame)
     }
     else if (CurrentFrame > Frames.size())
     {
-        throw (elParserException("Bug in this program! Take it back to the store and try to get a refund."));
+        throw (elParserException("Bug in this program! (PutFrameOnBack)"));
     }
     return;
 }
