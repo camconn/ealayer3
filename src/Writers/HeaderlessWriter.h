@@ -7,16 +7,13 @@
 #pragma once
 
 #include "Internal.h"
-#include "BlockLoader.h"
+#include "../BlockWriter.h"
 
-/**
- * The block writer.
- */
-class elBlockWriter
+class elHeaderlessWriter : public elBlockWriter
 {
 public:
-    elBlockWriter();
-    virtual ~elBlockWriter();
+    elHeaderlessWriter();
+    virtual ~elHeaderlessWriter();
 
     /**
      * Initialize the block writer with a pointer to an output stream.
@@ -26,8 +23,5 @@ public:
     /**
      * Write the next block to the output file.
      */
-    virtual void WriteNextBlock(const elBlock& Block, bool LastBlock) = 0;
-
-protected:
-    std::ostream* m_Output;
+    virtual void WriteNextBlock(const elBlock& Block, bool LastBlock);
 };

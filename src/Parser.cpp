@@ -265,7 +265,7 @@ bool elParser::ReadGranule(bsBitstream& IS, elGranule& Gr)
     {
         DataBitCount += Gr.ChannelInfo[i].Size;
     }
-
+    
     if (DataBitCount > IS.GetCountBitsLeft())
     {
         throw (elParserException("Data goes beyond end of stream."));

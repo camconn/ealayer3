@@ -268,6 +268,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
         }
 
         // Round to the nearest byte
+        Gr.DataSizeBits = GrDataSize;
         Gr.DataSize = GrDataSize;
         if (GrDataSize % 8)
         {

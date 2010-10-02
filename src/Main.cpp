@@ -19,7 +19,9 @@
 
 #include "MpegParser.h"
 #include "Generator.h"
-#include "BlockWriter.h"
+#include "Writers/HeaderlessWriter.h"
+
+#include "Bitstream.h"
 
 int g_Verbose = 0;
 
@@ -731,11 +733,23 @@ int Encode(SArguments& Args)
     }
 
     elGenerator Gen;
+    elHeaderlessWriter Writer;
+    Writer.Initialize(&Output);
 
     elFrame Frame;
-    for (unsigned int i = 0; i < 10; i++)
+    for (unsigned int i = 0; i < 1000; i++)
     {
+        elBlock Block;
+        
         Parser->ReadFrame(Frame);
+        if (Frame.Gr[0].Used)
+        {
+            Gen.AddFrameFromStream(Frame);
+            Gen.Generate(Block);
+            Writer.WriteNextBlock(Block, false);
+            VERBOSE(Output.tellp());
+            //Output.write((char*)Block.Data.get(), Block.Size);
+        }
     }
     return 0;
 }

@@ -9,6 +9,8 @@
 #include "Internal.h"
 
 class elFrame;
+class elGranule;
+class elBlock;
 class bsBitstream;
 
 /**
@@ -35,9 +37,29 @@ public:
     /**
      * Generate the resulting block. Takes all of the frames pushed so far, and
      * then clears the queue.
+     * @param Keep If non-zero then Generate will not discard the existing contents
+     *             of the frame, but rather it respects the data that is already
+     *             there, starting Keep bytes into the data.
      */
-    virtual bool Generate(bsBitstream& OS);
+    virtual bool Generate(elBlock& Block, unsigned int Keep = 0);
 
 protected:
+    /**
+     * Write a granule and uncompressed samples if there are any to the output
+     * bitstream.
+     */
+    virtual void WriteGranuleWithUncSamples(bsBitstream& OS, const elGranule& Gr);
+
+    /**
+     * Write a compressed granule to the output bitstream.
+     */
+    virtual void WriteGranule(bsBitstream& OS, const elGranule& Gr);
+
+    /**
+     * Write uncompressed samples to the output bitstream.
+     */
+    virtual void WriteUncSamples(bsBitstream& OS, const elGranule& Gr);
+
+    
     std::vector<elFrame> m_Streams;
 };

@@ -51,6 +51,7 @@ struct elGranule
 
     shared_array<uint8_t> Data;
     unsigned int DataSize;
+    unsigned int DataSizeBits;
 
     elUncompressedSampleFrames Uncomp;
     std::vector<elChannelInfo> ChannelInfo;

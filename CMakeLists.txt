@@ -53,6 +53,8 @@ set (SOURCE_FILES
 
     src/Parsers/ParserForSCx.cpp
     src/Parsers/ParserVersion6.cpp
+
+    src/Writers/HeaderlessWriter.cpp
     )
 
 add_executable (ealayer3 ${SOURCE_FILES})
