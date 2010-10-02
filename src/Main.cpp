@@ -736,20 +736,41 @@ int Encode(SArguments& Args)
     elHeaderlessWriter Writer;
     Writer.Initialize(&Output);
 
-    elFrame Frame;
-    for (unsigned int i = 0; i < 1000; i++)
+    elFrame Frame1;
+    elFrame Frame2;
+    elFrame* CurrentFrame = &Frame1;
+    elFrame* LastFrame = &Frame2;
+
+    LastFrame->Gr[0].Used = false;
+    
+    elBlock Block;
+    bool NoMoreFrames = false;
+    bool LastWrite = false;
+    
+    while (!LastWrite)
     {
-        elBlock Block;
-        
-        Parser->ReadFrame(Frame);
-        if (Frame.Gr[0].Used)
+        // Read the next frame in if we're not done
+        if (NoMoreFrames)
         {
-            Gen.AddFrameFromStream(Frame);
-            Gen.Generate(Block);
-            Writer.WriteNextBlock(Block, false);
-            VERBOSE(Output.tellp());
-            //Output.write((char*)Block.Data.get(), Block.Size);
+            LastWrite = true;
         }
+        else
+        {
+            NoMoreFrames = !Parser->ReadFrame(*CurrentFrame);
+        }
+
+        // Write the last frame if it was used
+        if (LastFrame->Gr[0].Used)
+        {
+            Gen.AddFrameFromStream(*LastFrame);
+            Gen.Generate(Block);
+            Writer.WriteNextBlock(Block, LastWrite);
+        }
+
+        // Now the current and last frames are swapped
+        elFrame* Temp = LastFrame;
+        LastFrame = CurrentFrame;
+        CurrentFrame = Temp;
     }
     return 0;
 }

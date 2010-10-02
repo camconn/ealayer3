@@ -42,6 +42,9 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
 {
     assert(m_Input);
 
+    Frame.Gr[0].Used = false;
+    Frame.Gr[1].Used = false;
+
     // Are there any frames left?
     if (!FramesLeft())
     {
@@ -51,6 +54,7 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
     // Figure out what kind of frame this is
     uint8_t FrameHeader[10];
     std::streamoff StartOffset;
+    m_Input->clear();
     StartOffset = m_Input->tellg();
     m_Input->read((char*)FrameHeader, 10);
     m_Input->seekg(StartOffset);
@@ -72,9 +76,12 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
         {
             return false;
         }
-        // TODO: Check if this is really a frame or just VBR info
     }
-    return false;
+    else
+    {
+        return false;
+    }
+    return true;
 }
 
 bool elMpegParser::FramesLeft() const
@@ -82,6 +89,29 @@ bool elMpegParser::FramesLeft() const
     assert(m_Input);
     return !m_Input->eof();
 }
+
+void elMpegParser::NextNonEmptyFrame()
+{
+    while (true)
+    {
+        const std::streamoff StartOffset = m_Input->tellg();
+        elFrame Frame;
+
+        Frame.Gr[0].Used = false;
+        
+        if (!ReadFrame(Frame))
+        {
+            break;
+        }
+        else if (Frame.Gr[0].Used)
+        {
+            m_Input->seekg(StartOffset);
+            break;
+        }
+    }
+    return;
+}
+
 
 void elMpegParser::SkipID3Tag(uint8_t FrameHeader[10])
 {
@@ -159,7 +189,7 @@ bool elMpegParser::ProcessFrameHeader(elRawFrameHeader& Fr, uint8_t FrameHeader[
     // Seek past the header and the CRC.
     m_Input->seekg(Fr.HeaderSize, std::ios_base::cur);
 
-    VERBOSE("Frame size: " << Fr.FrameSize);
+    //VERBOSE("Frame size: " << Fr.FrameSize);
     
     return true;
 }
@@ -216,7 +246,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
             elChannelInfo& Ci = Gr.ChannelInfo[j];
             
             Ci.Size = IS.ReadBits(12);
-            VERBOSE("        Size: " << Ci.Size);
+            //VERBOSE("        Size: " << Ci.Size);
             Ci.SideInfo[0] = IS.ReadBits(32);
             if (Gr.Version == MV_1)
             {
@@ -238,7 +268,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     }
     DataSize /= 8;
 
-    VERBOSE("    MainDataStart = " << MainDataStart);
+    //VERBOSE("    MainDataStart = " << MainDataStart);
 
     // The reservoir.
     bsBitstream Res;
@@ -310,7 +340,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
 
     // Put the bits on the end into the reservoir.
     m_ReservoirUsed = (Hdr.FrameSize - Hdr.HeaderSize - SideInfoSize) - (DataSize - MainDataStart);
-    VERBOSE("    ReservoirUsed = " << m_ReservoirUsed);
+    //VERBOSE("    ReservoirUsed = " << m_ReservoirUsed);
     if (m_ReservoirUsed < sizeof(m_Reservoir))
     {
         IS.SeekToNextByte();
@@ -321,13 +351,13 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     if (DataSize < 1)
     {
         VERBOSE("Skipped empty frame");
-        VERBOSE("");
+        //VERBOSE("");
         return true;
     }
 
     // Set used.
     Fr.Gr[0].Used = Fr.Gr[1].Used = true;
-    VERBOSE("");
+    //VERBOSE("");
     return true;
 }
 
