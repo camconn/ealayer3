@@ -137,13 +137,16 @@ void elGenerator::WriteGranule(bsBitstream& OS, const elGranule& Gr)
 
     // Write out the data
     unsigned long BitsLeft = Gr.DataSizeBits;
-    bsBitstream IS(Gr.Data.get(), BitsLeft);
-    
-    while (BitsLeft)
+    if (BitsLeft > 0)
     {
-        unsigned int ToWrite = min(32, BitsLeft);
-        OS.WriteBits(IS.ReadBits(ToWrite), ToWrite);
-        BitsLeft -= ToWrite;
+        bsBitstream IS(Gr.Data.get(), BitsLeft);
+
+        while (BitsLeft)
+        {
+            unsigned int ToWrite = min(32, BitsLeft);
+            OS.WriteBits(IS.ReadBits(ToWrite), ToWrite);
+            BitsLeft -= ToWrite;
+        }
     }
     return;
 }

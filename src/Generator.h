@@ -8,8 +8,8 @@
 
 #include "Internal.h"
 
-class elFrame;
-class elGranule;
+struct elFrame;
+struct elGranule;
 class elBlock;
 class bsBitstream;
 
