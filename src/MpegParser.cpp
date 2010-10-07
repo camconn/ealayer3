@@ -219,8 +219,9 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     
     // Read the frame into memory, without the 4 byte header.
     uint8_t FrameData[2880];
+    const std::streamsize FrameToRead = Hdr.FrameSize - Hdr.HeaderSize;
     const unsigned int SideInfoSize = elMpegGenerator::CalculateSideInfoSize(Hdr.Channels, Hdr.Version);
-    m_Input->read((char*)FrameData, Hdr.FrameSize - Hdr.HeaderSize);
+    m_Input->read((char*)FrameData, FrameToRead);
 
     // A bitstream for parsing the frame in memory.
     bsBitstream IS(FrameData, Hdr.FrameSize - Hdr.HeaderSize);

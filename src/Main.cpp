@@ -732,7 +732,7 @@ int Encode(SArguments& Args)
 
         // Create an MpegParser and perhaps a WaveParser for each of the inputs
         shared_ptr<std::ifstream> Input = make_shared<std::ifstream>();
-        Input->open(InputFiles.back().MpegFile.c_str());
+        Input->open(InputFiles.back().MpegFile.c_str(), std::ios_base::in | std::ios_base::binary);
         if (!Input->is_open())
         {
             std::cerr << "Could not open input file '" << InputFiles.back().MpegFile.c_str() << "'." << std::endl;
