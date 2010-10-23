@@ -64,7 +64,7 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
     {
         SkipID3Tag(FrameHeader);
     }
-    else /*if (FrameHeader[0] == 0xFF)*/
+    else if (FrameHeader[0] == 0xFF)
     {
         //m_Input->seekg(StartOffset + 4);
         elRawFrameHeader RawFrameHeader;
@@ -77,10 +77,10 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
             return false;
         }
     }
-    /*else
+    else
     {
         return false;
-    }*/
+    }
     return true;
 }
 
