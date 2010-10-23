@@ -20,6 +20,7 @@
 #include "MpegParser.h"
 #include "Generator.h"
 #include "Writers/HeaderlessWriter.h"
+#include "Writers/SingleBlockWriter.h"
 
 #include "Bitstream.h"
 
@@ -53,7 +54,8 @@ struct SArguments
         StreamIndex(0),
         AllStreams(false),
         Offset(0),
-        OutputFormat(EOF_AUTO)
+        OutputFormat(EOF_AUTO),
+        SingleBlock(false)
     {
     };
 
@@ -67,6 +69,7 @@ struct SArguments
     bool AllStreams;
     std::streamoff Offset;
     EOutputFormat OutputFormat;
+    bool SingleBlock;
 
     std::vector<std::string> InputFilenameVector;
 };
@@ -178,6 +181,10 @@ bool ParseArguments(SArguments& Args, unsigned long Argc, char* Argv[])
         {
             Args.Parser = EP_VERSION6;
         }
+        else if (Arg == "--single-block")
+        {
+            Args.SingleBlock = true;
+        }
         else if (Arg == "-E")
         {
             Args.OutputFormat = EOF_EALAYER3;
@@ -203,10 +210,16 @@ void ShowUsage(const std::string& Program)
     std::cout << "  -w, --wave            Output to Microsoft WAV." << std::endl;
     std::cout << "  -mc, --multi-wave     Output to a multi-channel Microsoft WAV." << std::endl;
     std::cout << "  --parser5             Force using the version 5 parser." << std::endl;
+    std::cout << "  --parser6             Force using the version 6/7 parser." << std::endl;
     std::cout << "  -n, --info            Output information about the file." << std::endl;
     std::cout << "  -v, --verbose         Be verbose (useful when streams won't convert)." << std::endl;
     std::cout << "  -b-, --no-banner      Don't show the banner." << std::endl;
     std::cout << std::endl;
+    std::cout << "Encoding: " << Program << " -E InputFile [InputFile2 ...] [Options]" << std::endl;
+    std::cout << "  --single-block        Create a stream to be loaded in memory. " << std::endl;
+    std::cout << std::endl;
+    std::cout << "If multiple input files are given, they will be be interleaved ";
+    std::cout << "into multiple streams" << std::endl << std::endl;
     std::cout << "Supported formats: " << std::endl;
 
     // List supported formats
@@ -282,7 +295,27 @@ int main(int Argc, char **Argv)
 
     if (Args.OutputFormat == EOF_EALAYER3)
     {
-        return Encode(Args);
+        try
+        {
+            return Encode(Args);
+        }
+        catch (elParserException& E)
+        {
+            std::cerr << "Problems reading the input file." << std::endl;
+            std::cerr << "Exception: " << E.what() << std::endl;
+            return 1;
+        }
+        catch (std::exception& E)
+        {
+            std::cerr << "There was an error." << std::endl;
+            std::cerr << "Exception: " << E.what() << std::endl;
+            return 1;
+        }
+        catch (...)
+        {
+            std::cerr << "Crashed." << std::endl;
+            return 1;
+        }
     }
 
     // Create an output filename if there isn't already one
@@ -763,12 +796,24 @@ int Encode(SArguments& Args)
 
     // The generator and writer
     elGenerator Gen;
-    shared_ptr<elBlockWriter> Writer = make_shared<elHeaderlessWriter>();
+    shared_ptr<elBlockWriter> Writer;
+
+    if (Args.SingleBlock)
+    {
+        Writer = make_shared<elSingleBlockWriter>();
+    }
+    else
+    {
+        Writer = make_shared<elHeaderlessWriter>();
+    }
     Writer->Initialize(&Output);
 
     // Some variables
     elBlock Block;
+    std::vector<elBlock> AllBlocks;
     bool NoMoreFrames = false;
+    unsigned int SampleRate = 0;
+    unsigned int Channels = 0;
 
     // The loop that parses all the MPEG frames and generates EALayer3 blocks
     while (!NoMoreFrames)
@@ -788,6 +833,24 @@ int Encode(SArguments& Args)
                     break;
                 }
             } while (!CurrentFrame.Gr[0].Used);
+        }
+
+        // Get the number of channels
+        unsigned int NewChannels = 0;
+        for (elEncodeInputVector::iterator Iter = InputFiles.begin();
+            Iter != InputFiles.end(); ++Iter)
+        {
+            elFrame& CurrentFrame = *Iter->CurrentFrame;
+
+            if (CurrentFrame.Gr[0].Used)
+            {
+                NewChannels += CurrentFrame.Gr[0].Channels;
+                SampleRate = CurrentFrame.Gr[0].SampleRate;
+            }
+        }
+        if (Channels == 0)
+        {
+            Channels = NewChannels;
         }
 
         // Add the last frame if it was used for each of the streams
@@ -811,8 +874,48 @@ int Encode(SArguments& Args)
         // Write the block
         if (Gen.Generate(Block))
         {
-            Writer->WriteNextBlock(Block, NoMoreFrames);
+            if (Args.SingleBlock)
+            {
+                AllBlocks.push_back(Block);
+                Block.Data.reset();
+                Block.Clear();
+            }
+            else
+            {
+                Writer->WriteNextBlock(Block, NoMoreFrames);
+            }
         }
+    }
+
+    if (Args.SingleBlock)
+    {
+        elBlock ActualBlock;
+        ActualBlock.Size = 0;
+        ActualBlock.SampleCount = 0;
+
+        for (std::vector<elBlock>::const_iterator Iter = AllBlocks.begin();
+            Iter != AllBlocks.end(); ++Iter)
+        {
+            ActualBlock.Size += Iter->Size;
+            ActualBlock.SampleCount += Iter->SampleCount;
+        }
+
+        ActualBlock.Data = shared_array<uint8_t>(new uint8_t[ActualBlock.Size]);
+
+        uint8_t* Ptr = ActualBlock.Data.get();
+        for (std::vector<elBlock>::const_iterator Iter = AllBlocks.begin();
+            Iter != AllBlocks.end(); ++Iter)
+        {
+            memcpy(Ptr, Iter->Data.get(), Iter->Size);
+            Ptr += Iter->Size;
+        }
+
+        Ptr = NULL;
+        AllBlocks.clear();
+
+        ActualBlock.Channels = Channels;
+        ActualBlock.SampleRate = SampleRate;
+        Writer->WriteNextBlock(ActualBlock, true);
     }
     return 0;
 }

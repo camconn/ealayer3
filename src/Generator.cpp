@@ -50,14 +50,20 @@ bool elGenerator::Generate(elBlock& Block, unsigned int Keep)
     
     // This is probably a bad assumption, but assume that there is enough
     // space for our block if the block is allocated at all.
-    if (!Block.Data)
+    if (Keep == 0)
     {
-        Block.Data = shared_array<uint8_t>(new uint8_t[2880 * 8]);
+        if (!Block.Data)
+        {
+            Block.Data = shared_array<uint8_t>(new uint8_t[2880 * 8]);
+        }
+        Block.Flags = 0;
+        Block.SampleCount = 1152; // TODO Fix me!!!
+        Block.Size = 0;
+        Block.Offset = 0;
     }
-    Block.Flags = 0;
-    Block.SampleCount = 1152; // TODO Fix me!!!
-    Block.Size = 0;
-    Block.Offset = 0;
+    else
+    {
+    }
 
     // The output streams
     bsBitstream OS(Block.Data.get(), 2880 * 8);

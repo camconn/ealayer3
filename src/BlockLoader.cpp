@@ -11,7 +11,9 @@
 elBlock::elBlock() :
         Size(0),
         SampleCount(0),
-        Flags(0)
+        Flags(0),
+        SampleRate(0),
+        Channels(0)
 {
     return;
 }
@@ -27,6 +29,8 @@ void elBlock::Clear()
     Size = 0;
     SampleCount = 0;
     Offset = 0;
+    SampleRate = 0;
+    Channels = 0;
     return;
 }
 

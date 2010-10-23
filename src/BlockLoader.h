@@ -20,6 +20,9 @@ public:
     unsigned int SampleCount;
     unsigned int Flags;
     std::streamoff Offset;
+
+    unsigned int SampleRate;
+    unsigned int Channels;
 };
 
 class elParser;
