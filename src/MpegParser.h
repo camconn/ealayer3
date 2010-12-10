@@ -25,10 +25,6 @@ public:
 
     /// Are there any frames left?
     bool FramesLeft() const;
-
-    /// Seek to the next non-empty frame.
-    void NextNonEmptyFrame();
-
     
 protected:
     /// A raw MPEG frame

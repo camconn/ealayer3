@@ -79,6 +79,40 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
     }
     else
     {
+        // Try to find the capture pattern in the first 2000 bytes.
+        VERBOSE("Trying to find the next frame... (ignore message if at the end of file)");
+        for (unsigned int i = 0; i < 2000 && !m_Input->eof(); i++)
+        {
+            StartOffset = m_Input->tellg();
+            FrameHeader[0] = m_Input->get();
+            
+            if (FrameHeader[0] == 0xFF)
+            {
+                VERBOSE("Found a frame!");
+                m_Input->read((char*)(FrameHeader + 1), 10 - 1);
+                m_Input->seekg(StartOffset);
+
+                try
+                {
+                    elRawFrameHeader RawFrameHeader;
+                    if (!ProcessFrameHeader(RawFrameHeader, FrameHeader))
+                    {
+                        return false;
+                    }
+                    if (!ProcessMpegFrame(Frame, RawFrameHeader))
+                    {
+                        return false;
+                    }
+                }
+                catch (std::exception& E)
+                {
+                    VERBOSE("Exception finding frame (doesn't matter if at the end of the file): " << E.what());
+                    return false;
+                }
+                return true;
+            }
+        }
+        VERBOSE("Not found.");
         return false;
     }
     return true;
@@ -89,29 +123,6 @@ bool elMpegParser::FramesLeft() const
     assert(m_Input);
     return !m_Input->eof();
 }
-
-void elMpegParser::NextNonEmptyFrame()
-{
-    while (true)
-    {
-        const std::streamoff StartOffset = m_Input->tellg();
-        elFrame Frame;
-
-        Frame.Gr[0].Used = false;
-        
-        if (!ReadFrame(Frame))
-        {
-            break;
-        }
-        else if (Frame.Gr[0].Used)
-        {
-            m_Input->seekg(StartOffset);
-            break;
-        }
-    }
-    return;
-}
-
 
 void elMpegParser::SkipID3Tag(uint8_t FrameHeader[10])
 {
@@ -372,8 +383,6 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     if (m_ReservoirUsed < sizeof(m_Reservoir))
     {
         IS.SeekToNextByte();
-        //VERBOSEVAR(IS.Tell() / 8);
-        //VERBOSEVAR(IS.GetCountBitsLeft() / 8);
         memcpy(m_Reservoir + StillInReservoir, IS.GetData() + IS.Tell() / 8, m_ReservoirUsed - StillInReservoir);
     }
 
