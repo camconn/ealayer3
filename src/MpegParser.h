@@ -60,7 +60,7 @@ protected:
     std::istream* m_Input;
 
     uint8_t m_Reservoir[2880];
-    unsigned int m_ReservoirUsed;
+    int m_ReservoirUsed;
 };
 
 class elMpegParserException : public std::exception

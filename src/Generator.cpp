@@ -76,7 +76,10 @@ bool elGenerator::Generate(elBlock& Block, unsigned int Keep)
             FrIter != m_Streams.end(); ++FrIter)
         {
             const elGranule& Gr = FrIter->Gr[i];
-            WriteGranuleWithUncSamples(OS, Gr);
+            if (Gr.Used)
+            {
+                WriteGranuleWithUncSamples(OS, Gr);
+            }
         }
     }
 

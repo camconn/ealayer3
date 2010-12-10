@@ -29,6 +29,7 @@ using namespace boost;
 extern int g_Verbose;
 #define VERBOSE(_output) VERBOSE_NO_ENDL(_output << std::endl)
 #define VERBOSE_NO_ENDL(_output) if(g_Verbose >= 1) { std::cout << _output; }
+#define VERBOSEVAR(_variable) VERBOSE("    " << #_variable << " = " << (_variable))
 
 // Macro for very verbose
 #ifdef ENABLE_VERY_VERBOSE

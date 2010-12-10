@@ -227,6 +227,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     bsBitstream IS(FrameData, Hdr.FrameSize - Hdr.HeaderSize);
 
     // Parse the side info.
+    const unsigned int GrCount = Hdr.Version == MV_1 ? 2 : 1;
     unsigned int MainDataStart;
     
     MainDataStart = IS.ReadBits(elMpegGenerator::CalculateMainDataStartBits(Hdr.Version));
@@ -241,7 +242,7 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     }
 
     unsigned int DataSize = 0;
-    for (unsigned int i = 0; i < 2; i++)
+    for (unsigned int i = 0; i < GrCount; i++)
     {
         for (unsigned int j = 0; j < Fr.Gr[i].Channels; j++)
         {
@@ -271,25 +272,23 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     }
     DataSize /= 8;
 
-    //VERBOSE("    MainDataStart = " << MainDataStart);
-
     // The reservoir.
     bsBitstream Res;
     unsigned int ResBitsLeft = MainDataStart * 8;
 
     if (DataSize && MainDataStart > m_ReservoirUsed)
     {
-        throw (elMpegParserException("Bit reservoir underflow. Invalid MP3 file."));
+        throw (elMpegParserException("Bit reservoir underflow. It is either an invalid MP3 file or there is a bug in this program."));
     }
 
     if (m_ReservoirUsed && MainDataStart)
     {
-        //VERBOSE(int(m_ReservoirUsed - MainDataStart));
+        //VERBOSEVAR(int(m_ReservoirUsed - MainDataStart));
         Res.SetData(m_Reservoir + (m_ReservoirUsed - MainDataStart), m_ReservoirUsed);
     }
 
     // Read in the data.
-    for (unsigned int i = 0; i < 2; i++)
+    for (unsigned int i = 0; i < GrCount; i++)
     {
         elGranule& Gr = Fr.Gr[i];
         
@@ -341,13 +340,41 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
         }
     }
 
-    // Put the bits on the end into the reservoir.
+    // Calculate the new reservoir size.
+    const int OldReservoirUsed = m_ReservoirUsed;
     m_ReservoirUsed = (Hdr.FrameSize - Hdr.HeaderSize - SideInfoSize) - (DataSize - MainDataStart);
-    //VERBOSE("    ReservoirUsed = " << m_ReservoirUsed);
+
+    // Okay, at this point if didn't use up all the data from the reservoir, we have
+    // to take care of that.
+    unsigned int StillInReservoir = ResBitsLeft / 8;
+    if (StillInReservoir > 0)
+    {
+        //VERBOSEVAR(OldReservoirUsed);
+        //VERBOSEVAR(StillInReservoir);
+        //VERBOSEVAR(OldReservoirUsed - StillInReservoir);
+        memmove(m_Reservoir, m_Reservoir + (OldReservoirUsed - StillInReservoir),
+                StillInReservoir);
+    }
+
+    //VERBOSEVAR(Hdr.FrameSize);
+    //VERBOSEVAR(Hdr.HeaderSize);
+    //VERBOSEVAR(SideInfoSize);
+    //VERBOSEVAR(DataSize);
+    //VERBOSEVAR(MainDataStart);
+
+    //VERBOSEVAR(m_ReservoirUsed);
+
+    // Put the bits on the end into the reservoir.
+    if (m_ReservoirUsed < 0)
+    {
+        throw (elMpegParserException("Data size error. It is either an invalid MP3 file or there is a bug in this program."));
+    }
     if (m_ReservoirUsed < sizeof(m_Reservoir))
     {
         IS.SeekToNextByte();
-        memcpy(m_Reservoir, IS.GetData() + IS.Tell() / 8, m_ReservoirUsed);
+        //VERBOSEVAR(IS.Tell() / 8);
+        //VERBOSEVAR(IS.GetCountBitsLeft() / 8);
+        memcpy(m_Reservoir + StillInReservoir, IS.GetData() + IS.Tell() / 8, m_ReservoirUsed - StillInReservoir);
     }
 
     // Make sure this frame actually has data
@@ -359,8 +386,16 @@ bool elMpegParser::ProcessMpegFrame(elFrame& Fr, elMpegParser::elRawFrameHeader&
     }
 
     // Set used.
-    Fr.Gr[0].Used = Fr.Gr[1].Used = true;
-    //VERBOSE("");
+    if (Hdr.Version == MV_1)
+    {
+        Fr.Gr[0].Used = Fr.Gr[1].Used = true;
+    }
+    else
+    {
+        Fr.Gr[0].Used = true;
+        Fr.Gr[1].Used = false;
+    }
+    //VERBOSE("-------------next frame---------------");
     return true;
 }
 
