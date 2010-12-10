@@ -9,7 +9,8 @@
 #include "../Parsers/ParserVersion6.h"
 
 elHeaderBLoader::elHeaderBLoader() :
-    m_SampleRate(0)
+    m_SampleRate(0),
+    m_UseParser6(true)
 {
     return;
 }
@@ -57,7 +58,16 @@ bool elHeaderBLoader::Initialize(std::istream* Input)
     m_Input->read((char*)&SampleRate, 2);
     Swap(SampleRate);
 
-    if (Compression != 0x16)
+    // Different parsers for different values
+    if (Compression == 0x15)
+    {
+        m_UseParser6 = false;
+    }
+    else if (Compression != 0x16)
+    {
+        m_UseParser6 = true;
+    }
+    else
     {
         VERBOSE("L: header B loader incorrect because of compression");
         return false;
@@ -133,11 +143,16 @@ bool elHeaderBLoader::ReadNextBlock(elBlock& Block)
 
 shared_ptr<elParser> elHeaderBLoader::CreateParser() const
 {
-    return make_shared<elParserVersion6>();
+    if (m_UseParser6)
+    {
+        return make_shared<elParserVersion6>();
+    }
+    return make_shared<elParser>();
 }
 
 void elHeaderBLoader::ListSupportedParsers(std::vector<std::string>& Names) const
 {
+    Names.push_back(make_shared<elParser>()->GetName());
     Names.push_back(make_shared<elParserVersion6>()->GetName());
     return;
 }

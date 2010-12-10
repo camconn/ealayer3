@@ -56,6 +56,7 @@ set (SOURCE_FILES
 
     src/Writers/HeaderlessWriter.cpp
     src/Writers/SingleBlockWriter.cpp
+    src/Writers/HeaderBWriter.cpp
     )
 
 add_executable (ealayer3 ${SOURCE_FILES})

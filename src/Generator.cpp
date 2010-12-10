@@ -79,6 +79,10 @@ bool elGenerator::Generate(elBlock& Block, unsigned int Keep)
             if (Gr.Used)
             {
                 WriteGranuleWithUncSamples(OS, Gr);
+
+                // Set the block properties
+                Block.SampleRate = Gr.SampleRate;
+                Block.Channels = Gr.Channels;
             }
         }
     }

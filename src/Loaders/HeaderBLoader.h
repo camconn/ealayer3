@@ -32,4 +32,5 @@ public:
 
 protected:
     unsigned int m_SampleRate;
+    bool m_UseParser6;
 };

@@ -21,6 +21,7 @@
 #include "Generator.h"
 #include "Writers/HeaderlessWriter.h"
 #include "Writers/SingleBlockWriter.h"
+#include "Writers/HeaderBWriter.h"
 
 #include "Bitstream.h"
 
@@ -42,6 +43,13 @@ enum EParser
     EP_VERSION6
 };
 
+enum EOutputEALayer3
+{
+    EOEA_HEADERLESS,
+    EOEA_SINGLEBLOCK,
+    EOEA_HEADERB
+};
+
 struct SArguments
 {
     SArguments() :
@@ -55,7 +63,7 @@ struct SArguments
         AllStreams(false),
         Offset(0),
         OutputFormat(EOF_AUTO),
-        SingleBlock(false)
+        OutputEALayer3(EOEA_HEADERLESS)
     {
     };
 
@@ -69,7 +77,7 @@ struct SArguments
     bool AllStreams;
     std::streamoff Offset;
     EOutputFormat OutputFormat;
-    bool SingleBlock;
+    EOutputEALayer3 OutputEALayer3;
 
     std::vector<std::string> InputFilenameVector;
 };
@@ -183,7 +191,11 @@ bool ParseArguments(SArguments& Args, unsigned long Argc, char* Argv[])
         }
         else if (Arg == "--single-block")
         {
-            Args.SingleBlock = true;
+            Args.OutputEALayer3 = EOEA_SINGLEBLOCK;
+        }
+        else if (Arg == "--header-b")
+        {
+            Args.OutputEALayer3 = EOEA_HEADERB;
         }
         else if (Arg == "-E")
         {
@@ -217,6 +229,7 @@ void ShowUsage(const std::string& Program)
     std::cout << std::endl;
     std::cout << "Encoding: " << Program << " -E InputFile [InputFile2 ...] [Options]" << std::endl;
     std::cout << "  --single-block        Create a stream to be loaded in memory. " << std::endl;
+    std::cout << "  --header-b            Create a stream in the header B format. " << std::endl;
     std::cout << std::endl;
     std::cout << "If multiple input files are given, they will be be interleaved ";
     std::cout << "into multiple streams" << std::endl << std::endl;
@@ -798,13 +811,17 @@ int Encode(SArguments& Args)
     elGenerator Gen;
     shared_ptr<elBlockWriter> Writer;
 
-    if (Args.SingleBlock)
+    switch (Args.OutputEALayer3)
     {
-        Writer = make_shared<elSingleBlockWriter>();
-    }
-    else
-    {
-        Writer = make_shared<elHeaderlessWriter>();
+        case EOEA_HEADERLESS:
+            Writer = make_shared<elHeaderlessWriter>();
+        break;
+        case EOEA_SINGLEBLOCK:
+            Writer = make_shared<elSingleBlockWriter>();
+        break;
+        case EOEA_HEADERB:
+            Writer = make_shared<elHeaderBWriter>();
+        break;
     }
     Writer->Initialize(&Output);
 
@@ -874,7 +891,7 @@ int Encode(SArguments& Args)
         // Write the block
         if (Gen.Generate(Block))
         {
-            if (Args.SingleBlock)
+            if (Args.OutputEALayer3 == EOEA_SINGLEBLOCK)
             {
                 AllBlocks.push_back(Block);
                 Block.Data.reset();
@@ -887,7 +904,7 @@ int Encode(SArguments& Args)
         }
     }
 
-    if (Args.SingleBlock)
+    if (Args.OutputEALayer3 == EOEA_SINGLEBLOCK)
     {
         elBlock ActualBlock;
         ActualBlock.Size = 0;
