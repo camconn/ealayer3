@@ -63,7 +63,7 @@ bool elHeaderBLoader::Initialize(std::istream* Input)
     {
         m_UseParser6 = false;
     }
-    else if (Compression != 0x16)
+    else if (Compression == 0x16)
     {
         m_UseParser6 = true;
     }

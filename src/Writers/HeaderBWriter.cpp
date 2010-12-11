@@ -85,7 +85,7 @@ void elHeaderBWriter::WriteHeader(const elBlock& Block)
     uint8_t Compression = 0x15;
     uint8_t ChannelValue = 4 * (Block.Channels - 1);
     uint16_t SampleRate = Block.SampleRate;
-    uint32_t Unknown = 0;
+    uint32_t Unknown = 0x40000000;
 
     Swap(SampleRate);
     Swap(Unknown);
