@@ -1,6 +1,6 @@
 /*
     EA Layer 3 Extractor/Decoder
-    Copyright (C) 2010, Ben Moench.
+    Copyright (C) 2010-2011, Ben Moench.
     See License.txt
 */
 
@@ -166,5 +166,13 @@ void elGenerator::WriteGranule(bsBitstream& OS, const elGranule& Gr)
 
 void elGenerator::WriteUncSamples(bsBitstream& OS, const elGranule& Gr)
 {
+	// Write out the samples, interleaving them
+    for (unsigned int i = 0; i < Gr.Channels; i++)
+    {
+        for (unsigned int j = 0; j < Gr.Uncomp.Count; j++)
+        {
+            OS.WriteAligned16BE<short>(Gr.Uncomp.Data[j * Gr.Channels + i]);
+        }
+    }
     return;
 }

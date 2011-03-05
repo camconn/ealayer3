@@ -1,6 +1,6 @@
 /*
     EA Layer 3 Extractor/Decoder
-    Copyright (C) 2010, Ben Moench.
+    Copyright (C) 2010-2011, Ben Moench.
     See License.txt
 */
 
@@ -44,6 +44,10 @@ bool elMpegParser::ReadFrame(elFrame& Frame)
 
     Frame.Gr[0].Used = false;
     Frame.Gr[1].Used = false;
+    Frame.Gr[0].Uncomp.Data.reset();
+    Frame.Gr[0].Uncomp.Count = 0;
+    Frame.Gr[1].Uncomp.Data.reset();
+    Frame.Gr[1].Uncomp.Count = 0;
 
     // Are there any frames left?
     if (!FramesLeft())

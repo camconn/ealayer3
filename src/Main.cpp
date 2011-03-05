@@ -1,6 +1,6 @@
 /*
     EA Layer 3 Extractor/Decoder
-    Copyright (C) 2010, Ben Moench.
+    Copyright (C) 2010-2011, Ben Moench.
     See License.txt
 */
 
@@ -829,6 +829,8 @@ int Encode(SArguments& Args)
     elBlock Block;
     std::vector<elBlock> AllBlocks;
     bool NoMoreFrames = false;
+    bool First = true;
+    bool WasUsed = false;
     unsigned int SampleRate = 0;
     unsigned int Channels = 0;
 
@@ -879,6 +881,19 @@ int Encode(SArguments& Args)
             
             if (LastFrame->Gr[0].Used)
             {
+            	if (First)
+            	{
+            		elUncompressedSampleFrames& Usf = LastFrame->Gr[0].Uncomp;
+            		unsigned int TotalCount;
+            		WasUsed = true;
+            		Usf.Count = 47;
+            		TotalCount = Usf.Count * LastFrame->Gr[0].Channels;
+            		Usf.Data = shared_array<short>(new short[TotalCount]);
+            		memset(Usf.Data.get(), 0, TotalCount * sizeof(short));
+            		
+            		std::cout << ": " << (void*)LastFrame->Gr[0].Channels << std::endl;
+            	}
+            	
                 Gen.AddFrameFromStream(*LastFrame);
             }
 
@@ -886,6 +901,11 @@ int Encode(SArguments& Args)
             elFrame* Temp = LastFrame;
             LastFrame = CurrentFrame;
             CurrentFrame = Temp;
+        }
+        
+        if (First && WasUsed)
+        {
+        	First = false;
         }
 
         // Write the block
