@@ -4,8 +4,8 @@ enable_testing ()
 
 # Set our version number
 set (ealayer3_VERSION_MAJOR 0)
-set (ealayer3_VERSION_MINOR 6)
-set (ealayer3_VERSION_PATCH 3)
+set (ealayer3_VERSION_MINOR 7)
+set (ealayer3_VERSION_PATCH 0)
 
 # Find boost and include it
 find_package (Boost 1.36.0 REQUIRED)
@@ -81,7 +81,7 @@ if (WIN32)
     install (TARGETS ealayer3 DESTINATION .)
     install (FILES "${PROJECT_SOURCE_DIR}/mpg123license.txt" DESTINATION .)
     install (FILES "${PROJECT_SOURCE_DIR}/license.txt" DESTINATION .)
-    install (FILES "${PROJECT_SOURCE_DIR}/win32/libmpg123-0.dll" DESTINATION .)
+    install (FILES "${PROJECT_SOURCE_DIR}/win32/libmpg123.dll" DESTINATION .)
 else (WIN32)
 	include (InstallRequiredSystemLibraries)
     install (TARGETS ealayer3 DESTINATION bin)

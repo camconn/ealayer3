@@ -14,7 +14,7 @@ typedef unsigned int uint32_t;
 typedef char int8_t;
 typedef short int16_t;
 typedef int int32_t;
-typedef int ssize_t;
+typedef long ssize_t;
 
 #else
 #include <stdint.h>

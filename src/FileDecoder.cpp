@@ -23,7 +23,7 @@ using boost::format;
 using std::runtime_error;
 
 
-inline void SeparateFilename(const std::string& Filename, std::string& PathAndName, std::string& Ext)
+static void _SeparateFilename(const std::string& Filename, std::string& PathAndName, std::string& Ext)
 {
     PathAndName = Filename;
     Ext = "";
@@ -278,7 +278,7 @@ void elFileDecoder::AutoSetOutputFormat()
     {
         std::string pathAndName;
         std::string ext;
-        SeparateFilename(outputFilename, pathAndName, ext);
+        _SeparateFilename(outputFilename, pathAndName, ext);
         
         for (unsigned int i = 0; i < ext.length(); i++)
         {
@@ -309,7 +309,7 @@ std::string elFileDecoder::GenOutputFilename(const std::string& append) const
     
     if (outputFilename.empty())
     {
-        SeparateFilename(inputFilename, pathAndName, ext);
+        _SeparateFilename(inputFilename, pathAndName, ext);
         
         switch (outputFormat)
         {
@@ -328,7 +328,7 @@ std::string elFileDecoder::GenOutputFilename(const std::string& append) const
     }
     else
     {
-        SeparateFilename(outputFilename, pathAndName, ext);
+        _SeparateFilename(outputFilename, pathAndName, ext);
     }
     
     return pathAndName + append + ext;
