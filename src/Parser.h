@@ -1,6 +1,6 @@
 /*
     EA Layer 3 Extractor/Decoder
-    Copyright (C) 2010, Ben Moench.
+    Copyright (C) 2010-2011, Ben Moench.
     See License.txt
 */
 
@@ -37,7 +37,7 @@ struct elUncompressedSampleFrames
 
 struct elGranule
 {
-    elGranule() : Used(false) {};
+    elGranule() : Used(false), Version(0) {};
 
     bool Used;
 

@@ -154,7 +154,7 @@ unsigned int elPcmOutputStream::FixupOutFrame(short* Buffer, unsigned int Buffer
     const unsigned int GrOffsetB = 576 * GetChannels();
     unsigned int ToCopy;
 
-    // If there are no uncompressed samples exit earyly
+    // If there are no uncompressed samples exit early
     if (GrA.Count == 0 && GrB.Count == 0)
     {
         return BufferSamples;

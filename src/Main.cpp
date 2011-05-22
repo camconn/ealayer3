@@ -9,6 +9,8 @@
 #include <fstream>
 #include <boost/format.hpp>
 
+#include "FileDecoder.h"
+
 #include "Version.h"
 #include "AllFormats.h"
 #include "MpegGenerator.h"
@@ -63,7 +65,10 @@ struct SArguments
         AllStreams(false),
         Offset(0),
         OutputFormat(EOF_AUTO),
-        OutputEALayer3(EOEA_HEADERLESS)
+        OutputEALayer3(EOEA_HEADERLESS),
+        
+        DecodeParser(elFileDecoder::P_AUTO),
+        DecodeOutFormat(elFileDecoder::F_AUTO)
     {
     };
 
@@ -78,6 +83,9 @@ struct SArguments
     std::streamoff Offset;
     EOutputFormat OutputFormat;
     EOutputEALayer3 OutputEALayer3;
+    
+    elFileDecoder::Parser DecodeParser;
+    elFileDecoder::Format DecodeOutFormat;
 
     std::vector<std::string> InputFilenameVector;
 };
@@ -86,11 +94,7 @@ struct SArguments
 void SeparateFilename(const std::string& Filename, std::string& PathAndName, std::string& Ext);
 bool ParseArguments(SArguments& Args, unsigned long Argc, char* Argv[]);
 void ShowUsage(const std::string& Program);
-void SetOutputFormat(SArguments& Args);
-void CreateOutputFilename(SArguments& Args);
 bool OpenOutputFile(std::ofstream& Output, const std::string& Filename);
-void FinishParsingBlocks(elBlockLoader& Loader, elMpegGenerator& Gen);
-void OutputMultiChannel(std::ofstream& Output, elMpegGenerator& Gen, SArguments& Args);
 int Encode(SArguments& Args);
 
 
@@ -168,14 +172,17 @@ bool ParseArguments(SArguments& Args, unsigned long Argc, char* Argv[])
         else if (Arg == "-w" || Arg == "--wave")
         {
             Args.OutputFormat = EOF_WAVE;
+            Args.DecodeOutFormat = elFileDecoder::F_WAVE;
         }
         else if (Arg == "-mc" || Arg == "--multi-wave")
         {
             Args.OutputFormat = EOF_MULTI_WAVE;
+            Args.DecodeOutFormat = elFileDecoder::F_MULTI_WAVE;
         }
         else if (Arg == "-m" || Arg == "--mp3")
         {
             Args.OutputFormat = EOF_MP3;
+            Args.DecodeOutFormat = elFileDecoder::F_MP3;
         }
         else if (Arg == "-v" || Arg == "--verbose")
         {
@@ -184,10 +191,12 @@ bool ParseArguments(SArguments& Args, unsigned long Argc, char* Argv[])
         else if (Arg == "--parser5")
         {
             Args.Parser = EP_VERSION5;
+            Args.DecodeParser = elFileDecoder::P_VERSION5;
         }
         else if (Arg == "--parser6")
         {
             Args.Parser = EP_VERSION6;
+            Args.DecodeParser = elFileDecoder::P_VERSION6;
         }
         else if (Arg == "--single-block")
         {
@@ -277,7 +286,7 @@ int main(int Argc, char **Argv)
     {
         std::cerr << "EA Layer 3 Stream Extractor/Decoder ";
         std::cerr << ealayer3_VERSION_MAJOR << "." << ealayer3_VERSION_MINOR << "." << ealayer3_VERSION_PATCH;
-        std::cerr << ". Copyright (C) 2010, Ben Moench." << std::endl;
+        std::cerr << ". Copyright (C) 2010-11, Ben Moench." << std::endl;
         std::cerr << std::endl;
     }
 
@@ -300,12 +309,7 @@ int main(int Argc, char **Argv)
         return 1;
     }
 
-    // Set the output format if not already set
-    if (Args.OutputFormat == EOF_AUTO)
-    {
-        SetOutputFormat(Args);
-    }
-
+    // Do we want to encode the file?
     if (Args.OutputFormat == EOF_EALAYER3)
     {
         try
@@ -330,212 +334,36 @@ int main(int Argc, char **Argv)
             return 1;
         }
     }
-
-    // Create an output filename if there isn't already one
-    bool ShowOutputFile = false;
-
-    if (Args.OutputFilename.empty() && !Args.ShowInfo)
-    {
-        CreateOutputFilename(Args);
-        ShowOutputFile = true;
-    }
-
-    // Open the input file
-    std::ifstream Input;
-
-    Input.open(Args.InputFilename.c_str(), std::ios_base::in | std::ios_base::binary);
-
-    if (!Input.is_open())
-    {
-        std::cerr << "Could not open input file '" << Args.InputFilename << "'." << std::endl;
-        return 1;
-    }
-
-    // Determine the input's file type here
-    elBlockLoaderSelector Loader;
-
-    Input.seekg(Args.Offset);
-
-    if (!Loader.Initialize(&Input))
-    {
-        std::cerr << "The input is not in a readable file format." << std::endl;
-        return 1;
-    }
-
-    // Grab the first block
-    elMpegGenerator Gen;
-
-    elBlock FirstBlock;
-
-    if (!Loader.ReadNextBlock(FirstBlock))
-    {
-        std::cerr << "The first block could not be read from the input." << std::endl;
-        return 1;
-    }
-
-    // Create the parser.
-    shared_ptr<elParser> Parser;
-    switch (Args.Parser)
-    {
-    case EP_VERSION5:
-        Parser = make_shared<elParser>();
-        break;
-
-    case EP_VERSION6:
-        Parser = make_shared<elParserVersion6>();
-        break;
-        
-    case EP_AUTO:
-    default:
-        Parser = Loader.CreateParser();
-        break;
-    }
-
-    if (!Gen.Initialize(FirstBlock, Parser))
-    {
-        std::cerr << "The EALayer3 parser could not be initialized (the bitstream format is not readable)." << std::endl;
-        return 1;
-    }
-
-    // Check the stream index
-    if (Args.StreamIndex >= Gen.GetStreamCount())
-    {
-        std::cerr << "The stream index (" << Args.StreamIndex << ") exceeds the total number of streams (" << Gen.GetStreamCount() << ")." << std::endl;
-        return 1;
-    }
-
-    // Show the info
-    if (Args.ShowInfo)
-    {
-        std::cout << "Stream count: " << Gen.GetStreamCount() << std::endl;
-        std::cout << std::endl;
-
-        if (Args.OutputFilename.empty())
-        {
-            return 0;
-        }
-    }
-
-    if (Args.AllStreams && Gen.GetStreamCount() > 32)
-    {
-        std::cerr << "Too many streams to be decoded." << std::endl;
-        return 1;
-    }
-
-    // Open the output files
-    std::ofstream OutputArray[32];
-
-    unsigned int OutputCount = 0;
-
-    if (Args.AllStreams && Gen.GetStreamCount() > 1 && Args.OutputFormat != EOF_MULTI_WAVE)
-    {
-        // Get the base name
-        std::string PathAndName;
-        std::string Ext;
-
-        SeparateFilename(Args.OutputFilename, PathAndName, Ext);
-
-        for (unsigned int i = 0; i < Gen.GetStreamCount(); i++)
-        {
-            std::string OutputName;
-            OutputName = (boost::format("%s_%u%s") % PathAndName % (i + 1) % Ext).str();
-
-            if (ShowOutputFile || Args.ShowInfo)
-            {
-                std::cout << "Output: " << OutputName << std::endl;
-            }
-
-            if (!OpenOutputFile(OutputArray[OutputCount++], OutputName))
-            {
-                return 1;
-            }
-        }
-    }
-    else
-    {
-        if (ShowOutputFile || Args.ShowInfo)
-        {
-            std::cout << "Output: " << Args.OutputFilename << std::endl;
-        }
-
-        if (!OpenOutputFile(OutputArray[OutputCount++], Args.OutputFilename))
-        {
-            return 1;
-        }
-    }
-
-    // Make sure we have something to decode
-    if (OutputCount == 0)
-    {
-        std::cerr << "Nothing was decoded." << std::endl;
-    }
-    else if (OutputCount > Gen.GetStreamCount())
-    {
-        std::cerr << "Program bug: Outputs.size() > Parser.GetStreamCount()" << std::endl;
-        return 1;
-    }
-
-    // Do it!
+    
+    // Decode the file
     try
     {
-        // Load in the file
-        VERBOSE("Parsing blocks...");
-        Gen.ParseBlock(FirstBlock);
-        FinishParsingBlocks(Loader, Gen);
-
-        // Write it out in the preferred output format
-        VERBOSE("Writing output file...");
-
-        if (Args.OutputFormat == EOF_MULTI_WAVE)
+        elFileDecoder decoder;
+        
+        decoder.SetInput(Args.InputFilename, Args.Offset);
+        decoder.SetParser(Args.DecodeParser);
+        
+        if (Args.AllStreams)
         {
-            OutputMultiChannel(OutputArray[0], Gen, Args);
+            decoder.SetStream(-1);
         }
         else
         {
-            for (unsigned int i = 0; i < OutputCount; i++)
-            {
-                const unsigned int MpegBufferSize = MAX_MPEG_FRAME_BUFFER;
-                shared_array<uint8_t> MpegBuffer(new uint8_t[MpegBufferSize]);
-                const unsigned int PcmBufferSamples = elPcmOutputStream::RecommendBufferSize();
-                shared_array<short> PcmBuffer(new short[PcmBufferSamples]);
-
-                if (Args.OutputFormat == EOF_MP3)
-                {
-                    shared_ptr<elMpegOutputStream> Stream = Gen.CreateMpegStream(Args.StreamIndex + i);
-
-                    while (!Stream->Eos())
-                    {
-                        unsigned int Read;
-                        Read = Stream->Read(MpegBuffer.get(), MpegBufferSize);
-                        OutputArray[i].write((char*) MpegBuffer.get(), Read);
-                    }
-                }
-                else if (Args.OutputFormat == EOF_WAVE)
-                {
-                    shared_ptr<elPcmOutputStream> Stream = Gen.CreatePcmStream(Args.StreamIndex + i);
-                    PrepareWaveHeader(OutputArray[i]);
-
-                    while (!Stream->Eos())
-                    {
-                        unsigned int Read;
-                        Read = Stream->Read(PcmBuffer.get(), PcmBufferSamples);
-                        OutputArray[i].write((char*) PcmBuffer.get(), Read * sizeof(short));
-                    }
-
-                    const unsigned int SampleCount = ((unsigned int) OutputArray[i].tellp() - 44) / 2;
-
-                    OutputArray[i].seekp(0);
-
-                    WriteWaveHeader(OutputArray[i], Gen.GetSampleRate(Args.StreamIndex + i), 16,
-                                    Gen.GetChannels(Args.StreamIndex + i), SampleCount);
-                }
-            }
+            decoder.SetStream(Args.StreamIndex);
         }
+        
+        decoder.SetOutput(Args.OutputFilename, Args.DecodeOutFormat);
+        decoder.Process();
     }
     catch (elParserException& E)
     {
         std::cerr << "Problems reading the input file." << std::endl;
         std::cerr << "Exception: " << E.what() << std::endl;
+        return 1;
+    }
+    catch (std::runtime_error& E)
+    {
+        std::cerr << E.what() << std::endl;
         return 1;
     }
     catch (std::exception& E)
@@ -549,55 +377,11 @@ int main(int Argc, char **Argv)
         std::cerr << "Crashed." << std::endl;
         return 1;
     }
-
-    // Write out some information
-    if (Args.ShowInfo)
-    {
-        Input.clear();
-
-        std::cout << "Uncompressed sample frames: " << Gen.GetUncSampleFrameCount() << std::endl;
-        std::cout << "End offset in file: " << Input.tellg() << std::endl;
-    }
-
-    VERBOSE("Done.");
-
+    
     return 0;
 }
 
-void SetOutputFormat(SArguments& Args)
-{
-    // Autodetect the output format from filename
-    if (Args.OutputFilename.empty())
-    {
-        Args.OutputFormat = EOF_MP3;
-    }
-    else
-    {
-        std::string PathAndName;
-        std::string Ext;
-        SeparateFilename(Args.OutputFilename, PathAndName, Ext);
 
-        for (unsigned int i = 0; i < Ext.length(); i++)
-        {
-            Ext[i] = tolower(Ext[i]);
-        }
-
-        if (Ext == ".mp3")
-        {
-            Args.OutputFormat = EOF_MP3;
-        }
-        else if (Ext == ".wav")
-        {
-            Args.OutputFormat = EOF_WAVE;
-        }
-        else
-        {
-            Args.OutputFormat = EOF_MP3;
-        }
-    }
-
-    return;
-}
 
 void CreateOutputFilename(SArguments& Args)
 {
@@ -641,88 +425,6 @@ bool OpenOutputFile(std::ofstream& Output, const std::string& Filename)
     }
 
     return true;
-}
-
-void FinishParsingBlocks(elBlockLoader& Loader, elMpegGenerator& Gen)
-{
-    while (true)
-    {
-        elBlock Block;
-
-        if (!Loader.ReadNextBlock(Block))
-        {
-            break;
-        }
-
-        Gen.ParseBlock(Block);
-    }
-
-    Gen.DoneParsingBlocks();
-
-    return;
-}
-
-void OutputMultiChannel(std::ofstream& Output, elMpegGenerator& Gen, SArguments& Args)
-{
-    // Create the streams
-    std::vector< shared_ptr<elPcmOutputStream> > Streams;
-    unsigned int ChannelCount = 0;
-
-    for (unsigned int i = 0; i < Gen.GetStreamCount(); i++)
-    {
-        Streams.push_back(Gen.CreatePcmStream(i));
-        ChannelCount += Gen.GetChannels(i);
-    }
-
-    if (!Streams.size())
-    {
-        return;
-    }
-
-    // Allocate a buffer
-    shared_array<short> ReadBuffer(new short[ChannelCount *
-                                   elPcmOutputStream::RecommendBufferSize()]);
-    const unsigned int PcmBufferSamples = elPcmOutputStream::RecommendBufferSize();
-    shared_array<short> PcmBuffer(new short[PcmBufferSamples]);
-
-    // Prepare the wave
-    PrepareWaveHeader(Output);
-
-    // Decode
-    while (!Streams[0]->Eos())
-    {
-        unsigned int Ch = 0;
-        unsigned int Frames = 0;
-
-        for (unsigned int i = 0; i < Gen.GetStreamCount(); i++)
-        {
-            unsigned int Read;
-            Read = Streams[i]->Read(PcmBuffer.get(), PcmBufferSamples);
-            Frames = Read / Streams[i]->GetChannels();
-
-            unsigned int OldCh = Ch;
-
-            for (unsigned int j = 0; j < Frames; j++)
-            {
-                Ch = OldCh;
-
-                for (unsigned int k = 0; k < Streams[i]->GetChannels(); k++)
-                {
-                    ReadBuffer[j * ChannelCount + Ch] = PcmBuffer[j * Streams[i]->GetChannels() + k];
-                    Ch++;
-                }
-            }
-        }
-
-        Output.write((char*) ReadBuffer.get(), Frames * ChannelCount * sizeof(short));
-    }
-
-    const unsigned int SampleCount = ((unsigned int) Output.tellp() - 44) / 2;
-    Output.seekp(0);
-    WriteWaveHeader(Output, Gen.GetSampleRate(0), 16,
-                    ChannelCount, SampleCount);
-
-    return;
 }
 
 struct elEncodeInput

@@ -1,6 +1,6 @@
 /*
     EA Layer 3 Extractor/Decoder
-    Copyright (C) 2010, Ben Moench.
+    Copyright (C) 2010-2011, Ben Moench.
     See License.txt
 */
 
@@ -171,7 +171,7 @@ void elMpegGenerator::ParseBlock(const elBlock& Block)
     }
 
     m_SampleFrames += Block.SampleCount;
-    VERY_VERBOSE("Block offset: " << Block.Offset << ", Block size: " << Block.Size << "Sample count: " << Block.SampleCount);
+    VERY_VERBOSE("Block offset: " << Block.Offset << "; Block size: " << Block.Size << "; Sample count: " << Block.SampleCount);
 
     // Read the block data
     bsBitstream IS(Block.Data.get(), Block.Size);

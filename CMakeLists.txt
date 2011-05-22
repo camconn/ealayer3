@@ -32,6 +32,8 @@ include_directories("${PROJECT_BINARY_DIR}")
 # The list of source files
 set (SOURCE_FILES
     src/Main.cpp
+    src/FileDecoder.cpp
+    
     src/BlockLoader.cpp
     src/Parser.cpp
     src/MpegGenerator.cpp
